@@ -1,5 +1,3 @@
-
-
 ### **Procedure : Updating the Backend**
 
 **Objective:** Pull the latest backend code, install any new packages, run database migrations, and restart the application with zero downtime.
@@ -8,7 +6,7 @@
 
 1.  **Navigate to the Backend Directory:**
     ```bash
-    cd ~/ecommerce-insights-backend
+    cd ~/dycom-ecommerce-backend
     ```
 
 2.  **Pull the Latest Code from GitHub:**
@@ -38,16 +36,15 @@
 6.  **Restart the Application via PM2:**
     PM2 will perform a zero-downtime restart, loading your new code.
     ```bash
-    pm2 restart ecommerce-backend
+    pm2 restart dycom-backend
     ```
 
 7.  **Verify the Update:**
     Check the status and logs to ensure the application restarted correctly.
     ```bash
     pm2 list
-    # The 'uptime' for ecommerce-backend should have reset to a few seconds.
+    # The 'uptime' for dycom-backend should have reset to a few seconds.
 
-    pm2 logs ecommerce-backend
+    pm2 logs dycom-backend
     # Check for any new errors on startup.
     ```
-
