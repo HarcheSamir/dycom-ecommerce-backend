@@ -1,0 +1,212 @@
+{
+    "info": {
+      "name": "API Test Collection",
+      "description": "Collection to test Express.js API endpoints",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+      {
+        "name": "Auth Routes",
+        "item": [
+          {
+            "name": "Sign Up",
+            "request": {
+              "method": "POST",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"email\": \"test@example.com\", \"password\": \"password123\", \"name\": \"Test User\"}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/api/auth/signup",
+                "host": ["{{baseUrl}}"],
+                "path": ["api", "auth", "signup"]
+              }
+            }
+          },
+          {
+            "name": "Login",
+            "event": [
+              {
+                "listen": "test",
+                "script": {
+                  "type": "text/javascript",
+                  "exec": [
+                    "const response = pm.response.json();",
+                    "if (response.token) {",
+                    "    pm.environment.set('authToken', response.token);",
+                    "}"
+                  ]
+                }
+              }
+            ],
+            "request": {
+              "method": "POST",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"email\": \"test@example.com\", \"password\": \"password123\"}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/api/auth/login",
+                "host": ["{{baseUrl}}"],
+                "path": ["api", "auth", "login"]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Content Creator Routes",
+        "item": [
+          {
+            "name": "Search Content Creators",
+            "request": {
+              "method": "POST",
+              "header": [
+                {
+                  "key": "Authorization",
+                  "value": "Bearer {{authToken}}"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"keyword\": \"tech\", \"country\": \"US\", \"page\": 1, \"limit\": 10}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/api/content-creators/search",
+                "host": ["{{baseUrl}}"],
+                "path": ["api", "content-creators", "search"]
+              }
+            }
+          },
+          {
+            "name": "Record Profile Visit",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                {
+                  "key": "Authorization",
+                  "value": "Bearer {{authToken}}"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/api/content-creators/1/visit",
+                "host": ["{{baseUrl}}"],
+                "path": ["api", "content-creators", "1", "visit"]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "User Routes",
+        "item": [
+          {
+            "name": "Get User Profile",
+            "request": {
+              "method": "GET",
+              "header": [
+                {
+                  "key": "Authorization",
+                  "value": "Bearer {{authToken}}"
+                }
+              ],
+              "url": {
+                "raw": "{{baseUrl}}/api/user/me",
+                "host": ["{{baseUrl}}"],
+                "path": ["api", "user", "me"]
+              }
+            }
+          },
+          {
+            "name": "Update Password",
+            "request": {
+              "method": "PATCH",
+              "header": [
+                {
+                  "key": "Authorization",
+                  "value": "Bearer {{authToken}}"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"currentPassword\": \"password123\", \"newPassword\": \"newpassword456\"}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/api/user/update-password",
+                "host": ["{{baseUrl}}"],
+                "path": ["api", "user", "update-password"]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "Payment Routes",
+        "item": [
+          {
+            "name": "Create Payment Intent",
+            "request": {
+              "method": "POST",
+              "header": [
+                {
+                  "key": "Authorization",
+                  "value": "Bearer {{authToken}}"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": {
+                "mode": "raw",
+                "raw": "{\"amount\": 1000, \"currency\": \"USD\"}"
+              },
+              "url": {
+                "raw": "{{baseUrl}}/api/payment/create-intent/1",
+                "host": ["{{baseUrl}}"],
+                "path": ["api", "payment", "create-intent", "1"]
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "variable": [
+      {
+        "key": "baseUrl",
+        "value": "http://localhost:3000"
+      },
+      {
+        "key": "authToken",
+        "value": ""
+      }
+    ]
+  }

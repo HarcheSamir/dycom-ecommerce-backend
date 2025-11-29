@@ -1,0 +1,51 @@
+{
+  "name": "content-creator",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "postinstall": "prisma generate",
+    "dev": "nodemon --exec \"npx ts-node --project tsconfig.json\" src/index.ts",
+    "start": "ts-node --project tsconfig.json src/index.ts",
+    "build": "tsc",
+    "import:csv": "ts-node --compiler-options \"{\\\"module\\\": \\\"CommonJS\\\"}\" scripts/import.ts",
+    "enrich:products": "ts-node ./scripts/enrich-products.ts",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start:prod": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@google/genai": "^1.25.0",
+    "@prisma/client": "^6.14.0",
+    "axios": "^1.12.2",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "csv-parse": "^6.1.0",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-oas-generator": "^1.0.48",
+    "g-trends": "^0.0.9",
+    "google-trends-api": "^4.9.2",
+    "https-proxy-agent": "^7.0.6",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^4.2.1",
+    "prisma": "^6.14.0",
+    "puppeteer": "^24.25.0",
+    "stripe": "^18.4.0",
+    "swagger-ui-express": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.6.2",
+    "@types/swagger-ui-express": "^4.1.8",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
