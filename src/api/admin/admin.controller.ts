@@ -75,6 +75,7 @@ export const createCourse = async (req: Request, res: Response) => {
 
     const product = await stripe.products.create({ name: title });
 
+    // Only create Stripe Price if amount is greater than 0
     if (priceEur && Number(priceEur) > 0) {
       const stripePrice = await stripe.prices.create({
         product: product.id,
@@ -107,9 +108,11 @@ export const createCourse = async (req: Request, res: Response) => {
         title,
         description,
         coverImageUrl,
-        priceEur: priceEur ? Number(priceEur) : null,
-        priceUsd: priceUsd ? Number(priceUsd) : null,
-        priceAed: priceAed ? Number(priceAed) : null,
+        // --- FIX START: Default to 0 instead of null if undefined/empty ---
+        priceEur: (priceEur !== undefined && priceEur !== null && priceEur !== '') ? Number(priceEur) : 0,
+        priceUsd: (priceUsd !== undefined && priceUsd !== null && priceUsd !== '') ? Number(priceUsd) : 0,
+        priceAed: (priceAed !== undefined && priceAed !== null && priceAed !== '') ? Number(priceAed) : 0,
+        // --- FIX END ---
         stripePriceIdEur,
         stripePriceIdUsd,
         stripePriceIdAed,
@@ -122,6 +125,7 @@ export const createCourse = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Could not create course.' });
   }
 };
+
 
 export const updateCourse = async (req: Request, res: Response) => {
     const { courseId } = req.params;
