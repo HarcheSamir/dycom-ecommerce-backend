@@ -40,52 +40,63 @@ export const getStripeFinancialStats = async (req: Request, res: Response) => {
 /**
  * @description Fetches customers using SEARCH to filter by project ('dycom').
  */
+
 export const getStripeCustomers = async (req: Request, res: Response) => {
     try {
-        const { limit = 20, starting_after } = req.query;
+        const { limit = 20, starting_after, ending_before } = req.query;
 
-        // 1. USE SEARCH INSTEAD OF LIST (Filters by project tag)
-        const params: Stripe.CustomerSearchParams = {
-            query: "metadata['project']:'dycom'",
+        const params: Stripe.CustomerListParams = {
             limit: Number(limit),
-            expand: ['data.invoice_settings.default_payment_method'],
+            expand: [
+                'data.subscriptions.data.default_payment_method',
+                'data.invoice_settings.default_payment_method'
+            ],
         };
 
-        if (starting_after) {
-            params.page = starting_after as string;
-        }
+        if (starting_after) params.starting_after = starting_after as string;
+        if (ending_before) params.ending_before = ending_before as string;
 
-        const customers = await stripe.customers.search(params);
+        const customers = await stripe.customers.list(params);
 
-        // 2. Process in parallel
         const formattedCustomers = await Promise.all(customers.data.map(async (customer: any) => {
             if (customer.deleted) return null;
 
-            const subId = customer.subscriptions?.data?.[0]?.id;
+            // --- STRICT FILTER FIX ---
+            // Previous logic let untagged people through.
+            // This logic requires the tag to exist AND match 'dycom'.
+            if (customer.metadata?.project !== 'dycom') {
+               return null; 
+            }
+            // -------------------------
+
+            const sub = customer.subscriptions?.data[0];
             const paymentMethod = customer.invoice_settings?.default_payment_method;
+
             let planDisplay = null;
 
-            if (subId) {
-                try {
-                    // --- FIX: Cast to 'any' to bypass TS error on current_period_end ---
-                    const sub: any = await stripe.subscriptions.retrieve(subId);
-                    
-                    planDisplay = {
-                        type: 'subscription',
-                        status: sub.status,
-                        interval: sub.items?.data[0]?.price?.recurring?.interval || 'one-time',
-                        amount: sub.items?.data[0]?.price?.unit_amount || 0,
-                        currency: sub.items?.data[0]?.price?.currency || 'usd',
-                        current_period_end: sub.current_period_end 
-                    };
-                } catch (err) { 
-                    console.error(`Failed to retrieve sub ${subId}`, err); 
-                }
-            } else {
-                // Fallback for Lifetime (One-time payments)
-                const charges = await stripe.charges.list({ customer: customer.id, limit: 5 });
-                const successfulCharge = charges.data.find((c) => c.status === 'succeeded');
+            if (sub) {
+                const periodEnd = sub.items?.data[0]?.current_period_end || sub.current_period_end || null;
                 
+                planDisplay = {
+                    type: 'subscription',
+                    status: sub.status,
+                    interval: sub.items?.data[0]?.price?.recurring?.interval || 'one-time',
+                    amount: sub.items?.data[0]?.price?.unit_amount || 0,
+                    currency: sub.items?.data[0]?.price?.currency || 'usd',
+                    current_period_end: periodEnd,
+                    next_billing_date: periodEnd 
+                        ? new Date(periodEnd * 1000).toISOString() 
+                        : null
+                };
+            } 
+            else {
+                const charges = await stripe.charges.list({
+                    customer: customer.id,
+                    limit: 5, 
+                });
+
+                const successfulCharge = charges.data.find((c) => c.status === 'succeeded');
+
                 if (successfulCharge) {
                     planDisplay = {
                         type: 'one_time',
@@ -118,8 +129,8 @@ export const getStripeCustomers = async (req: Request, res: Response) => {
         res.status(200).json({
             data: formattedCustomers.filter(c => c !== null),
             has_more: customers.has_more,
-            first_id: null, 
-            last_id: customers.next_page || null 
+            first_id: customers.data.length > 0 ? customers.data[0].id : null,
+            last_id: customers.data.length > 0 ? customers.data[customers.data.length - 1].id : null
         });
 
     } catch (error) {
