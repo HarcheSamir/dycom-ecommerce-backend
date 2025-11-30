@@ -5,7 +5,7 @@ import {
     getAdminDashboardStats, createCourse, getAdminCourses, getCourseDetails,
     createSection, addVideoToSection, updateCourse, deleteCourse,
     updateSection, deleteSection, updateVideo, deleteVideo, updateVideoOrder,
-    getSettings, updateSettings,getMembershipPrices, updateMembershipPrices ,    updateSectionOrder 
+    getSettings, updateSettings,getMembershipPrices, updateMembershipPrices ,    updateSectionOrder,  getAdminUsers, grantLifetimeAccess 
 
 } from './admin.controller';
 // ==================== THIS IS THE FIX: Re-import the controller ====================
@@ -52,5 +52,8 @@ router.put('/settings', updateSettings);
 
 router.get('/financials/stats', getStripeFinancialStats);
 router.get('/financials/customers', getStripeCustomers);
+
+router.get('/users', getAdminUsers);
+router.put('/users/:userId/grant-lifetime', grantLifetimeAccess);
 
 export default router;

@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { prisma } from '../../index';
 import Stripe from 'stripe';
 import { Language } from '@prisma/client';
+import { SubscriptionStatus } from '@prisma/client';
+
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 
@@ -580,5 +582,122 @@ export const updateSectionOrder = async (req: Request, res: Response) => {
     } catch (error) {
         console.error("Error updating section order:", error);
         res.status(500).json({ error: 'Could not update section order.' });
+    }
+};
+
+
+// src/api/admin/admin.controller.ts
+
+export const getAdminUsers = async (req: Request, res: Response) => {
+    try {
+        const { page = 1, limit = 20, search, status, installments } = req.query;
+        const skip = (Number(page) - 1) * Number(limit);
+
+        // Use an AND array to safely combine multiple conditions
+        const andConditions: any[] = [];
+
+        // 1. Search Filter
+        if (search) {
+            andConditions.push({
+                OR: [
+                    { email: { contains: String(search) } },
+                    { firstName: { contains: String(search) } },
+                    { lastName: { contains: String(search) } },
+                ]
+            });
+        }
+
+        // 2. Status Filter
+        if (status && status !== 'ALL') {
+            andConditions.push({ subscriptionStatus: String(status) });
+        }
+
+        // 3. Installments/Plan Filter
+        if (installments && installments !== 'ALL') {
+            if (installments === 'LIFETIME') {
+                // If filtering for Lifetime, we specifically look for the status
+                andConditions.push({ subscriptionStatus: 'LIFETIME_ACCESS' });
+            } else {
+                // If filtering for 2 or 3 installments
+                const count = Number(installments);
+                andConditions.push({ installmentsRequired: count });
+                
+                // Ensure we don't accidentally pick up a weird lifetime user with 2 installments setup
+                // (Though logically impossible, this keeps it clean)
+                andConditions.push({ subscriptionStatus: { not: 'LIFETIME_ACCESS' } });
+            }
+        }
+
+        // Construct the final where object
+        const where = andConditions.length > 0 ? { AND: andConditions } : {};
+
+        const [users, total] = await prisma.$transaction([
+            prisma.user.findMany({
+                where,
+                skip,
+                take: Number(limit),
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true,
+                    subscriptionStatus: true,
+                    installmentsPaid: true,
+                    installmentsRequired: true,
+                    createdAt: true,
+                    stripeSubscriptionId: true,
+                    stripeCustomerId: true,
+                }
+            }),
+            prisma.user.count({ where })
+        ]);
+
+        res.status(200).json({
+            data: users,
+            meta: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) }
+        });
+
+    } catch (error) {
+        console.error('Error fetching users:', error);
+        res.status(500).json({ error: 'Failed to fetch users.' });
+    }
+};
+
+export const grantLifetimeAccess = async (req: Request, res: Response) => {
+    const { userId } = req.params;
+
+    try {
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+
+        // 1. If they have an active Stripe Subscription, CANCEL IT immediately
+        // so they don't get charged again (since we are giving them lifetime).
+        if (user.stripeSubscriptionId) {
+            try {
+                await stripe.subscriptions.cancel(user.stripeSubscriptionId);
+                console.log(`Cancelled subscription ${user.stripeSubscriptionId} for user ${userId} (Granting Lifetime)`);
+            } catch (err) {
+                console.warn("Could not cancel stripe sub (might be already cancelled):", err);
+            }
+        }
+
+        // 2. Update Database to Lifetime
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: {
+                subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS,
+                installmentsPaid: 1,      // Visual override
+                installmentsRequired: 1,  // Visual override
+                stripeSubscriptionId: null, // Clear link to recurring sub
+                currentPeriodEnd: null,   // No expiry
+            }
+        });
+
+        res.status(200).json({ message: 'User granted Lifetime Access.', user: updatedUser });
+
+    } catch (error) {
+        console.error('Error granting lifetime access:', error);
+        res.status(500).json({ error: 'Failed to update user.' });
     }
 };
