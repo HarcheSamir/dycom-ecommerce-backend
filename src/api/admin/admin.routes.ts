@@ -5,8 +5,7 @@ import {
     getAdminDashboardStats, createCourse, getAdminCourses, getCourseDetails,
     createSection, addVideoToSection, updateCourse, deleteCourse,
     updateSection, deleteSection, updateVideo, deleteVideo, updateVideoOrder,
-    getSettings, updateSettings,getMembershipPrices, updateMembershipPrices ,    updateSectionOrder , getAdminUserDetails, 
-    grantLifetimeAccess
+    getSettings, updateSettings,getMembershipPrices, updateMembershipPrices ,    updateSectionOrder 
 
 } from './admin.controller';
 // ==================== THIS IS THE FIX: Re-import the controller ====================
