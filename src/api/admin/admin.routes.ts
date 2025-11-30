@@ -10,6 +10,7 @@ import {
 // ==================== THIS IS THE FIX: Re-import the controller ====================
 import { getAffiliateLeaderboard } from './affiliate.controller';
 // ===================================================================================
+import { getStripeFinancialStats, getStripeCustomers } from './stripe.controller';
 
 const router = Router();
 
@@ -45,5 +46,8 @@ router.put('/membership-prices', updateMembershipPrices);
 // Settings Management
 router.get('/settings', getSettings);
 router.put('/settings', updateSettings);
+
+router.get('/financials/stats', getStripeFinancialStats);
+router.get('/financials/customers', getStripeCustomers);
 
 export default router;
