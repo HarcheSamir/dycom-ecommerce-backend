@@ -5,7 +5,8 @@ import {
     getAdminDashboardStats, createCourse, getAdminCourses, getCourseDetails,
     createSection, addVideoToSection, updateCourse, deleteCourse,
     updateSection, deleteSection, updateVideo, deleteVideo, updateVideoOrder,
-    getSettings, updateSettings,getMembershipPrices, updateMembershipPrices 
+    getSettings, updateSettings,getMembershipPrices, updateMembershipPrices ,    updateSectionOrder 
+
 } from './admin.controller';
 // ==================== THIS IS THE FIX: Re-import the controller ====================
 import { getAffiliateLeaderboard } from './affiliate.controller';
@@ -28,6 +29,8 @@ router.delete('/courses/:courseId', deleteCourse);
 router.post('/courses/:courseId/sections', createSection);
 router.put('/sections/:sectionId', updateSection);
 router.delete('/sections/:sectionId', deleteSection);
+router.put('/courses/:courseId/sections/order', updateSectionOrder);
+
 
 // Video Management
 router.post('/sections/:sectionId/videos', addVideoToSection);

@@ -556,3 +556,29 @@ export const updateMembershipPrices = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to update prices.' });
     }
 };
+
+// ... existing imports
+
+export const updateSectionOrder = async (req: Request, res: Response) => {
+    const { courseId } = req.params;
+    const { sections }: { sections: { id: string, order: number }[] } = req.body;
+
+    if (!Array.isArray(sections)) {
+        return res.status(400).json({ error: 'A "sections" array is required.' });
+    }
+
+    try {
+        const updatePromises = sections.map(section =>
+            prisma.section.update({
+                where: { id: section.id },
+                data: { order: section.order },
+            })
+        );
+
+        await prisma.$transaction(updatePromises);
+        res.status(200).json({ message: 'Section order updated successfully.' });
+    } catch (error) {
+        console.error("Error updating section order:", error);
+        res.status(500).json({ error: 'Could not update section order.' });
+    }
+};
