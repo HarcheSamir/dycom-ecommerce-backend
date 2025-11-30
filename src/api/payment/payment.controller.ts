@@ -28,6 +28,10 @@ export const paymentController = {
         const customer = await stripe.customers.create({
           email: user.email,
           name: `${user.firstName} ${user.lastName}`,
+          metadata: {
+            project: 'dycom', 
+            userId: userId  
+          }
         });
         stripeCustomerId = customer.id;
         await prisma.user.update({
@@ -52,7 +56,7 @@ export const paymentController = {
           currency: price.currency,
           customer: stripeCustomerId,
           payment_method: paymentMethodId,
-          confirm: true, 
+          confirm: true,
           return_url: 'https://influencecontact.com/dashboard',
           metadata: {
             userId: userId,
@@ -62,16 +66,16 @@ export const paymentController = {
         });
 
         if (paymentIntent.status === 'requires_action') {
-           return res.status(200).json({
-             status: 'requires_action',
-             clientSecret: paymentIntent.client_secret
-           });
+          return res.status(200).json({
+            status: 'requires_action',
+            clientSecret: paymentIntent.client_secret
+          });
         }
 
         if (paymentIntent.status === 'succeeded') {
-           return res.status(200).json({ status: 'succeeded' });
+          return res.status(200).json({ status: 'succeeded' });
         }
-        
+
         return res.status(400).json({ error: `Payment failed with status: ${paymentIntent.status}` });
       }
       else {
@@ -80,17 +84,17 @@ export const paymentController = {
           items: [{ price: priceId }],
           expand: ["latest_invoice.payment_intent"],
           metadata: {
-             type: 'MEMBERSHIP_TRANCHE',
-             userId: userId,
-             installmentsRequired: installmentsRequired.toString()
+            type: 'MEMBERSHIP_TRANCHE',
+            userId: userId,
+            installmentsRequired: installmentsRequired.toString()
           }
         });
 
         await prisma.user.update({
-            where: { id: userId },
-            data: { 
-                installmentsRequired: installmentsRequired,
-            }
+          where: { id: userId },
+          data: {
+            installmentsRequired: installmentsRequired,
+          }
         });
 
         const latestInvoice = subscription.latest_invoice as any;
@@ -139,7 +143,7 @@ export const paymentController = {
       } else if (currency === 'aed') {
         initialPrice = course.priceAed;
         stripePriceId = course.stripePriceIdAed;
-      } else { 
+      } else {
         initialPrice = course.priceUsd;
         stripePriceId = course.stripePriceIdUsd;
       }
@@ -176,7 +180,7 @@ export const paymentController = {
         }
 
         if (finalPrice <= 0) {
-          return null; 
+          return null;
         }
 
         const paymentIntent = await stripe.paymentIntents.create({
@@ -210,11 +214,11 @@ export const paymentController = {
   // --- THE FIX IS HERE ---
   async getProductsAndPrices(req: AuthenticatedRequest, res: Response) {
     try {
-      const currency = req.query.currency || 'usd'; 
+      const currency = req.query.currency || 'usd';
 
       const prices = await stripe.prices.list({
         active: true,
-        currency: currency as string, 
+        currency: currency as string,
         expand: ['data.product'],
         limit: 100, // Fetch more to be safe
       });
@@ -230,10 +234,10 @@ export const paymentController = {
         const interval = price.recurring?.interval ?? 'one-time';
         // --- FIX: Include installment count in the uniqueness key ---
         const installments = price.metadata.installments || '1';
-        
+
         // New Key Format: productID-interval-installments
         const key = `${product.id}-${interval}-${installments}`;
-        
+
         const existingPrice = latestPrices.get(key);
 
         if (!existingPrice || price.created > existingPrice.created) {
@@ -244,7 +248,7 @@ export const paymentController = {
       const uniqueLatestPrices = Array.from(latestPrices.values());
 
       const formattedPrices = uniqueLatestPrices.map(price => {
-        const product = price.product as Stripe.Product; 
+        const product = price.product as Stripe.Product;
         return {
           id: price.id,
           name: product.name,
@@ -252,7 +256,7 @@ export const paymentController = {
           price: price.unit_amount,
           currency: price.currency,
           interval: price.recurring?.interval,
-          metadata: price.metadata 
+          metadata: price.metadata
         };
       });
 
