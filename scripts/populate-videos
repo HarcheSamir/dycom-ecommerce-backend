@@ -1,0 +1,106 @@
+-- 1. Optional: Clean up previous test data (Uncomment if you want a clean slate)
+-- DELETE FROM videos;
+-- DELETE FROM course_sections;
+-- DELETE FROM video_courses;
+
+-- 2. Change Delimiter to allow writing the procedure
+DELIMITER $$
+
+-- 3. Drop procedure if it exists to avoid errors
+DROP PROCEDURE IF EXISTS GenerateFullTestData$$
+
+-- 4. Create the Procedure
+CREATE PROCEDURE GenerateFullTestData()
+BEGIN
+    DECLARE i_lang INT DEFAULT 1;
+    DECLARE i_course INT DEFAULT 1;
+    DECLARE i_section INT DEFAULT 1;
+    DECLARE i_video INT DEFAULT 1;
+    
+    DECLARE curr_lang VARCHAR(5);
+    DECLARE curr_course_id VARCHAR(36);
+    DECLARE curr_section_id VARCHAR(36);
+    DECLARE curr_title VARCHAR(255);
+    
+    -- Loop 1: Languages (1=FR, 2=EN, 3=AR)
+    WHILE i_lang <= 3 DO
+        IF i_lang = 1 THEN SET curr_lang = 'FR'; END IF;
+        IF i_lang = 2 THEN SET curr_lang = 'EN'; END IF;
+        IF i_lang = 3 THEN SET curr_lang = 'AR'; END IF;
+        
+        SET i_course = 1;
+        
+        -- Loop 2: 3 Courses per Language
+        WHILE i_course <= 3 DO
+            SET curr_course_id = UUID();
+            
+            -- Set Title based on Language
+            IF curr_lang = 'FR' THEN SET curr_title = CONCAT('Formation E-commerce Expert - Vol. ', i_course);
+            ELSEIF curr_lang = 'EN' THEN SET curr_title = CONCAT('E-commerce Mastery - Vol. ', i_course);
+            ELSE SET curr_title = CONCAT('احتراف التجارة الإلكترونية - الجزء ', i_course);
+            END IF;
+
+            INSERT INTO video_courses (id, title, description, `order`, coverImageUrl, priceEur, priceUsd, priceAed, language, createdAt)
+            VALUES (
+                curr_course_id, 
+                curr_title, 
+                'Complete comprehensive training. From zero to hero.', 
+                i_course, 
+                'https://cdn.shopify.com/s/files/1/0070/7032/articles/shopify_20stores_69468464-f9f4-40ec-b6f1-2bb1a3c5f1bc.png?v=1764005858', 
+                0, 0, 0, 
+                curr_lang, 
+                NOW()
+            );
+
+            SET i_section = 1;
+            
+            -- Loop 3: 5 Sections per Course
+            WHILE i_section <= 5 DO
+                SET curr_section_id = UUID();
+                
+                INSERT INTO course_sections (id, title, `order`, courseId)
+                VALUES (
+                    curr_section_id, 
+                    CONCAT(curr_lang, ' - Module ', i_section), 
+                    i_section, 
+                    curr_course_id
+                );
+
+                SET i_video = 1;
+                
+                -- Loop 4: 3 Videos per Section
+                WHILE i_video <= 3 DO
+                    INSERT INTO videos (id, title, description, vimeoId, duration, `order`, sectionId)
+                    VALUES (
+                        UUID(), 
+                        CONCAT('Lesson ', i_section, '.', i_video, ' - Deep Dive'), 
+                        'In this video we analyze the core concepts.', 
+                        '1128661159', 
+                        10 + i_video, 
+                        i_video, 
+                        curr_section_id
+                    );
+                    SET i_video = i_video + 1;
+                END WHILE;
+
+                SET i_section = i_section + 1;
+            END WHILE;
+
+            SET i_course = i_course + 1;
+        END WHILE;
+
+        SET i_lang = i_lang + 1;
+    END WHILE;
+END$$
+
+-- 5. Reset Delimiter
+DELIMITER ;
+
+-- 6. Execute the Procedure
+CALL GenerateFullTestData();
+
+-- 7. Clean up
+DROP PROCEDURE GenerateFullTestData;
+
+-- 8. Verify Data
+SELECT language, COUNT(*) as courses_count FROM video_courses GROUP BY language;

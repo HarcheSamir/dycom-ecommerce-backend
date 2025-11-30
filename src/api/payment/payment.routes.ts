@@ -15,5 +15,6 @@ router.post("/create-course-payment-intent", authMiddleware, paymentController.c
 router.post("/cancel-subscription", authMiddleware, paymentController.cancelSubscription);
 router.post("/reactivate-subscription", authMiddleware, paymentController.reactivateSubscription);
 
+router.post("/guest-checkout", paymentController.createGuestCheckoutSession);
 
 export default router;

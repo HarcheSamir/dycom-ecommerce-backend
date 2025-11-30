@@ -1,6 +1,6 @@
 // src/api/payment/payment.controller.ts
 
-import { Response } from "express";
+import { Response ,Request} from "express";
 import { PrismaClient } from "@prisma/client";
 import Stripe from "stripe";
 import { AuthenticatedRequest } from "../../utils/AuthRequestType";
@@ -29,8 +29,8 @@ export const paymentController = {
           email: user.email,
           name: `${user.firstName} ${user.lastName}`,
           metadata: {
-            project: 'dycom', 
-            userId: userId  
+            project: 'dycom',
+            userId: userId
           }
         });
         stripeCustomerId = customer.id;
@@ -324,6 +324,59 @@ export const paymentController = {
     } catch (error: any) {
       console.error("Subscription reactivation failed:", error);
       res.status(500).json({ error: "Failed to reactivate subscription." });
+    }
+  },
+
+  async createGuestCheckoutSession(req: Request, res: Response) {
+    try {
+      const { installments } = req.body; // Expecting '2' or '3'
+
+      // 1. Find the EUR price for the requested installments
+      // We search Stripe for active prices with the correct metadata
+      const prices = await stripe.prices.search({
+        query: `active:'true' AND metadata['type']:'membership_tier' AND metadata['installments']:'${installments}' AND currency:'eur'`,
+        limit: 1
+      });
+
+      if (prices.data.length === 0) {
+        return res.status(404).json({ error: "Price plan not found." });
+      }
+
+      const targetPrice = prices.data[0];
+
+      // 2. Create Checkout Session
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        mode: 'subscription',
+        line_items: [
+          {
+            price: targetPrice.id,
+            quantity: 1,
+          },
+        ],
+        // Tag them so they show up in your Admin Panel filter
+        subscription_data: {
+          metadata: {
+            project: 'dycom',
+            installmentsRequired: installments // Helps tracking later
+          }
+        },
+        // Tag the customer as well (Creation happens here)
+        payment_intent_data: undefined, // Not needed for subscription mode
+        metadata: {
+          project: 'dycom',
+          type: 'GUEST_CHECKOUT'
+        },
+        success_url: `${process.env.FRONTEND_URL || 'https://dycom-club.com'}/login?payment=success`,
+        cancel_url: `${process.env.FRONTEND_URL || 'https://dycom-club.com'}/pricing`,
+        allow_promotion_codes: true,
+      });
+
+      res.json({ url: session.url });
+
+    } catch (error: any) {
+      console.error("Guest checkout creation failed:", error);
+      res.status(500).json({ error: error.message });
     }
   },
 
