@@ -18,10 +18,13 @@ CREATE TABLE `users` (
     `availableCourseDiscounts` INTEGER NOT NULL DEFAULT 0,
     `otpCode` VARCHAR(191) NULL,
     `otpExpiresAt` DATETIME(3) NULL,
+    `resetPasswordToken` VARCHAR(191) NULL,
+    `resetPasswordExpires` DATETIME(3) NULL,
 
     UNIQUE INDEX `users_email_key`(`email`),
     UNIQUE INDEX `users_stripeCustomerId_key`(`stripeCustomerId`),
     UNIQUE INDEX `users_stripeSubscriptionId_key`(`stripeSubscriptionId`),
+    UNIQUE INDEX `users_resetPasswordToken_key`(`resetPasswordToken`),
     INDEX `users_referredById_fkey`(`referredById`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
