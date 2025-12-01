@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { Prisma, Language } from '@prisma/client'; // ++ THIS LINE IS THE FIX ++
+import { Prisma, Language } from '@prisma/client';
 import { prisma } from '../../index';
 import { AuthenticatedRequest } from '../../utils/AuthRequestType';
 
@@ -9,45 +9,25 @@ import { AuthenticatedRequest } from '../../utils/AuthRequestType';
 export const getAllCourses = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    
-    // --- 1. Get Filters & UI Language ---
-    const { search, sortBy, language: languageFilter } = req.query as { search?: string; sortBy?: string; language?: string };
+    const { search, sortBy, language: languageFilter } = req.query as any;
     const uiLang = req.headers['accept-language']?.split(',')[0].split('-')[0] || 'fr';
 
-    // --- 2. Build Dynamic WHERE Clause ---
     const where: Prisma.VideoCourseWhereInput = {};
-
-    if (search) {
-      // Search overrides language filters
-      where.OR = [
-        { title: { contains: search } },
-        { description: { contains: search } },
-      ];
-    } else if (languageFilter && languageFilter !== 'ALL') {
-      // Explicit language filter from UI
-      where.language = languageFilter as Language;
-    } else if (!languageFilter) {
-      // Default: filter by UI language if no search or explicit filter is set
-      const langEnum = uiLang.toUpperCase() as Language;
-      if (Object.values(Language).includes(langEnum)) {
-          where.language = langEnum;
-      }
-    }
-    // If languageFilter is 'ALL', the where clause remains empty for language.
-
-    // --- 3. Build Dynamic ORDER BY Clause ---
-    let orderBy: Prisma.VideoCourseOrderByWithRelationInput = { createdAt: 'desc' }; // Default sort
-    if (sortBy === 'title') {
-      orderBy = { title: 'asc' };
+    if (search) where.OR = [{ title: { contains: search } }, { description: { contains: search } }];
+    else if (languageFilter && languageFilter !== 'ALL') where.language = languageFilter as Language;
+    else if (!languageFilter) {
+        const langEnum = uiLang.toUpperCase() as Language;
+        if (Object.values(Language).includes(langEnum)) where.language = langEnum;
     }
 
-    // --- 4. Determine Currency ---
+    let orderBy: Prisma.VideoCourseOrderByWithRelationInput = { createdAt: 'desc' };
+    if (sortBy === 'title') orderBy = { title: 'asc' };
+
     let currency: 'eur' | 'usd' | 'aed';
     if (uiLang === 'fr') currency = 'eur';
     else if (uiLang === 'ar') currency = 'aed';
     else currency = 'usd';
 
-    // --- 5. Execute Query ---
     const coursesFromDb = await prisma.videoCourse.findMany({
       where,
       orderBy,
@@ -63,17 +43,31 @@ export const getAllCourses = async (req: AuthenticatedRequest, res: Response) =>
           priceAed: true,
           sections: {
               select: {
-                  _count: { select: { videos: true } }
+                  videos: {
+                      select: {
+                          id: true,
+                          progress: {
+                              where: { userId, completed: true },
+                              select: { id: true }
+                          }
+                      }
+                  }
               },
           },
       }
     });
 
-    // --- 6. Format Response ---
     const coursesWithProgressAndPrice = coursesFromDb.map(course => {
-      const totalVideos = course.sections.reduce((sum, section) => sum + section._count.videos, 0);
+      let totalVideos = 0;
+      let completedVideos = 0;
+
+      course.sections.forEach(section => {
+          totalVideos += section.videos.length;
+          completedVideos += section.videos.reduce((acc, video) => acc + (video.progress.length > 0 ? 1 : 0), 0);
+      });
+
       const { sections, priceEur, priceUsd, priceAed, ...rest } = course;
-      
+
       let price;
       if (currency === 'eur') price = priceEur;
       else if (currency === 'aed') price = priceAed;
@@ -82,7 +76,7 @@ export const getAllCourses = async (req: AuthenticatedRequest, res: Response) =>
       return {
         ...rest,
         totalVideos,
-        completedVideos: 0, // Note: Progress calculation removed for performance on main listing.
+        completedVideos,
         price: price,
         currency: currency,
       };
@@ -90,12 +84,14 @@ export const getAllCourses = async (req: AuthenticatedRequest, res: Response) =>
 
     return res.status(200).json(coursesWithProgressAndPrice);
   } catch (error) {
-    console.error('Error fetching courses with progress:', error);
+    console.error('Error fetching courses:', error);
     return res.status(500).json({ error: 'An internal server error occurred.' });
   }
 };
 
-
+/**
+ * @description Get Course Details with FULL user progress to enable "Resume" functionality.
+ */
 export const getCourseById = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { courseId } = req.params;
@@ -110,7 +106,24 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
                     include: {
                         videos: {
                             orderBy: { order: 'asc' },
-                            select: { id: true, title: true, description: true, vimeoId: true, duration: true, order: true, progress: { where: { userId } } },
+                            select: {
+                                id: true,
+                                title: true,
+                                description: true,
+                                vimeoId: true,
+                                duration: true,
+                                order: true,
+                                // Return the specific progress for this user
+                                progress: {
+                                    where: { userId },
+                                    select: {
+                                        completed: true,
+                                        lastPosition: true,
+                                        percentage: true,
+                                        // Removed updatedAt as it does not exist in schema
+                                    }
+                                }
+                            },
                         },
                     },
                 },
@@ -133,16 +146,11 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
     const isSubscriber = user?.subscriptionStatus === 'ACTIVE';
     const hasPurchased = (user?.coursePurchases?.length ?? 0) > 0;
     const isAdmin = user?.accountType === 'ADMIN';
-    
-    // --- THIS IS THE FIX ---
-    // Check both price fields to determine if the course is free.
     const isFreeCourse = (course.priceEur === null || course.priceEur === 0) && (course.priceUsd === null || course.priceUsd === 0);
-    // --- END OF FIX ---
-
     const hasAccess = isAdmin || hasPurchased || (isSubscriber && isFreeCourse);
 
     if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied. This course must be purchased individually.' });
+      return res.status(403).json({ error: 'Access denied.' });
     }
 
     return res.status(200).json(course);
@@ -153,34 +161,43 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
 };
 
 /**
- * @description Updates or creates a progress record for a video.
- * (This function remains unchanged)
+ * @description Updates progress. Handles "Completed" logic based on threshold.
  */
 export const updateVideoProgress = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { videoId } = req.params;
     const userId = req.user!.userId;
-    const { completed } = req.body as { completed: boolean };
+    const { lastPosition, percentage } = req.body;
 
-    if (typeof completed !== 'boolean') {
-      return res.status(400).json({ error: 'The "completed" field is required and must be a boolean.' });
-    }
+    // 1. Determine if completed based on percentage (95% threshold)
+    const isCompleted = Number(percentage) >= 80;
 
-    const progressData = {
-      userId,
-      videoId,
-      completed,
-      completedAt: completed ? new Date() : null,
+    const updateData: any = {
+      lastPosition: Number(lastPosition),
+      percentage: Number(percentage),
+      // Removed updatedAt manual setting
     };
 
-    await prisma.videoProgress.upsert({
+    // Only mark completed, never un-mark it automatically
+    if (isCompleted) {
+        updateData.completed = true;
+        updateData.completedAt = new Date();
+    }
+
+    const result = await prisma.videoProgress.upsert({
       where: { userId_videoId: { userId, videoId } },
-      update: progressData,
-      create: progressData,
+      update: updateData,
+      create: {
+          userId,
+          videoId,
+          ...updateData,
+          completed: isCompleted || false
+      },
     });
 
-    return res.status(200).json({ message: 'Progress updated successfully.' });
+    return res.status(200).json({ message: 'Progress saved.', data: result });
   } catch (error) {
+    console.error("Update Progress Error", error);
     return res.status(500).json({ error: 'An internal server error occurred.' });
   }
 };

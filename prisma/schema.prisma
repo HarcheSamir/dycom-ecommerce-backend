@@ -213,13 +213,17 @@ model Section {
 }
 
 model VideoProgress {
-  id          String    @id @default(uuid())
-  userId      String
-  videoId     String
-  completed   Boolean   @default(false)
-  completedAt DateTime?
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  video       Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  id           String    @id @default(uuid())
+  userId       String
+  videoId      String
+  completed    Boolean   @default(false)
+  completedAt  DateTime?
+  
+  lastPosition Float     @default(0) // Timestamp in seconds where they left off
+  percentage   Int       @default(0) // 0-100 percent watched
+  
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video        Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   @@unique([userId, videoId])
   @@index([videoId], map: "video_progress_videoId_fkey")
