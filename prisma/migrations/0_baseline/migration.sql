@@ -18,8 +18,8 @@ CREATE TABLE `users` (
     `availableCourseDiscounts` INTEGER NOT NULL DEFAULT 0,
     `otpCode` VARCHAR(191) NULL,
     `otpExpiresAt` DATETIME(3) NULL,
-    `resetPasswordToken` VARCHAR(191) NULL,
     `resetPasswordExpires` DATETIME(3) NULL,
+    `resetPasswordToken` VARCHAR(191) NULL,
 
     UNIQUE INDEX `users_email_key`(`email`),
     UNIQUE INDEX `users_stripeCustomerId_key`(`stripeCustomerId`),

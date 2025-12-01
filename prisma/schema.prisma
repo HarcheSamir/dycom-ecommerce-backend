@@ -26,8 +26,8 @@ model User {
   availableCourseDiscounts Int                @default(0)
   otpCode                  String?
   otpExpiresAt             DateTime?
-  resetPasswordToken       String?   @unique
   resetPasswordExpires     DateTime?
+  resetPasswordToken       String?            @unique
   coursePurchases          CoursePurchase[]
   notifications            Notification[]
   searchHistory            SearchHistory[]
