@@ -15,7 +15,7 @@ const ADMINS_TO_ADD = [
     email: 'Referenceweb98@gmail.com', 
     firstName: 'Owner', 
     lastName: 'Admin',
-    password: 'Password123!' 
+    password: 'Dycom123.@' 
   }
 ];
 
