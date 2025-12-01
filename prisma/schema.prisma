@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,39 +8,266 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  firstName     String
-  lastName      String
-  email         String    @unique
-  password      String
-  status        UserStatus @default(ACTIVE)
-  accountType   AccountType @default(USER)
-  createdAt     DateTime  @default(now())
-  
-  stripeCustomerId String?   @unique
-  transactions     Transaction[]
-  notifications    Notification[]
-  searchHistory    SearchHistory[]
-  visitedProfiles  VisitedProfile[]
-  videoProgress    VideoProgress[]
-  favorites        UserFavorite[]
-  referredById     String?
-  referrer         User?   @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  referrals        User[]  @relation("Referrals")
+  id                       String             @id @default(uuid())
+  firstName                String
+  lastName                 String
+  email                    String             @unique
+  password                 String
+  status                   UserStatus         @default(ACTIVE)
+  accountType              AccountType        @default(USER)
+  createdAt                DateTime           @default(now())
+  stripeCustomerId         String?            @unique
+  referredById             String?
+  stripeSubscriptionId     String?            @unique
+  subscriptionStatus       SubscriptionStatus @default(INCOMPLETE)
+  currentPeriodEnd         DateTime?
+  installmentsPaid         Int                @default(0)
+  installmentsRequired     Int                @default(1)
+  availableCourseDiscounts Int                @default(0)
+  otpCode                  String?
+  otpExpiresAt             DateTime?
+  resetPasswordToken       String?   @unique
+  resetPasswordExpires     DateTime?
+  coursePurchases          CoursePurchase[]
+  notifications            Notification[]
+  searchHistory            SearchHistory[]
+  transactions             Transaction[]
+  favorites                UserFavorite[]
+  referrer                 User?              @relation("Referrals", fields: [referredById], references: [id])
+  referrals                User[]             @relation("Referrals")
+  videoProgress            VideoProgress[]
+  visitedProfiles          VisitedProfile[]
 
-  // --- MODIFIED SUBSCRIPTION FIELDS ---
-  stripeSubscriptionId String?   @unique
-  subscriptionStatus   SubscriptionStatus @default(INCOMPLETE)
-  currentPeriodEnd     DateTime?
-  
-  // --- NEW FIELDS FOR TRANCHES ---
-  installmentsPaid     Int @default(0)
-  installmentsRequired Int @default(1) // Default to 1 (Paid in full)
-  
-  coursePurchases    CoursePurchase[]
-  availableCourseDiscounts Int @default(0)
-
+  @@index([referredById], map: "users_referredById_fkey")
   @@map("users")
+}
+
+model Transaction {
+  id                   String    @id @default(uuid())
+  amount               Float
+  currency             String
+  status               String
+  createdAt            DateTime  @default(now())
+  userId               String
+  stripeSubscriptionId String?   @unique
+  stripePriceId        String?
+  stripeInvoiceId      String?
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean?  @default(false)
+  user                 User      @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "transactions_userId_fkey")
+  @@map("transactions")
+}
+
+model ContentCreator {
+  id          String           @id @default(uuid())
+  profileLink String
+  nickname    String?
+  username    String
+  country     String
+  email       String?
+  instagram   String?
+  youtube     String?
+  followers   Int              @default(0)
+  posts       Int              @default(0)
+  likes       Int              @default(0)
+  bio         String?          @db.Text
+  regionId    String
+  nicheId     String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  niche       Niche?           @relation(fields: [nicheId], references: [id])
+  region      Region           @relation(fields: [regionId], references: [id])
+  visitedBy   VisitedProfile[]
+
+  @@index([nicheId], map: "content_creators_nicheId_fkey")
+  @@index([regionId], map: "content_creators_regionId_fkey")
+  @@map("content_creators")
+}
+
+model Region {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  countryName     String?
+  flag            String?
+  contentCreators ContentCreator[]
+
+  @@map("regions")
+}
+
+model Niche {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  contentCreators ContentCreator[]
+
+  @@map("niches")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "notifications_userId_fkey")
+  @@map("notifications")
+}
+
+model SearchHistory {
+  id        String   @id @default(uuid())
+  keyword   String?
+  country   String?
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@index([userId], map: "search_history_userId_fkey")
+  @@map("search_history")
+}
+
+model VisitedProfile {
+  id        String         @id @default(uuid())
+  visitedAt DateTime       @default(now())
+  userId    String
+  creatorId String
+  creator   ContentCreator @relation(fields: [creatorId], references: [id])
+  user      User           @relation(fields: [userId], references: [id])
+
+  @@index([creatorId], map: "visited_profiles_creatorId_fkey")
+  @@index([userId], map: "visited_profiles_userId_fkey")
+  @@map("visited_profiles")
+}
+
+model MigratedFiles {
+  id         String   @id @default(uuid())
+  fileName   String
+  filePath   String
+  migratedAt DateTime @default(now())
+
+  @@map("migrated_files")
+}
+
+model VideoCourse {
+  id               String           @id @default(uuid())
+  title            String
+  description      String?          @db.Text
+  order            Int              @default(0)
+  coverImageUrl    String?
+  priceEur         Float?           @default(0)
+  priceUsd         Float?           @default(0)
+  priceAed         Float?           @default(0)
+  stripePriceIdEur String?          @unique
+  stripePriceIdUsd String?          @unique
+  stripePriceIdAed String?          @unique
+  language         Language         @default(EN)
+  createdAt        DateTime         @default(now())
+  purchasedBy      CoursePurchase[]
+  sections         Section[]
+
+  @@map("video_courses")
+}
+
+model CoursePurchase {
+  id            String      @id @default(uuid())
+  purchasePrice Float
+  purchasedAt   DateTime    @default(now())
+  userId        String
+  courseId      String
+  course        VideoCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([courseId], map: "course_purchases_courseId_fkey")
+  @@map("course_purchases")
+}
+
+model Video {
+  id          String          @id @default(uuid())
+  title       String
+  description String?         @db.Text
+  vimeoId     String          @db.Text
+  duration    Int?
+  order       Int             @default(0)
+  sectionId   String
+  progress    VideoProgress[]
+  section     Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId], map: "videos_sectionId_fkey")
+  @@map("videos")
+}
+
+model Section {
+  id       String      @id @default(uuid())
+  title    String
+  order    Int         @default(0)
+  courseId String
+  course   VideoCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  videos   Video[]
+
+  @@index([courseId], map: "course_sections_courseId_fkey")
+  @@map("course_sections")
+}
+
+model VideoProgress {
+  id          String    @id @default(uuid())
+  userId      String
+  videoId     String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video       Video     @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoId])
+  @@index([videoId], map: "video_progress_videoId_fkey")
+  @@map("video_progress")
+}
+
+model WinningProduct {
+  id                     String         @id @default(uuid())
+  productId              BigInt         @unique
+  title                  String?        @db.Text
+  productUrl             String?        @db.Text
+  imageUrl               String?        @db.Text
+  price                  Float?
+  currency               String?        @default("USD")
+  salesVolume            Int?
+  categoryName           String?
+  firstLevelCategoryName String?
+  historicalData         Json?
+  googleTrendKeyword     String?
+  source                 String         @default("RapidAPI/AliExpress")
+  importedAt             DateTime       @default(now())
+  shopName               String?
+  shopEvaluationRate     String?
+  shopUrl                String?        @db.Text
+  shopId                 BigInt?
+  favoritedBy            UserFavorite[]
+
+  @@map("winning_products")
+}
+
+model UserFavorite {
+  id        String         @id @default(uuid())
+  userId    String
+  productId String
+  createdAt DateTime       @default(now())
+  product   WinningProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([productId], map: "user_favorites_productId_fkey")
+  @@map("user_favorites")
+}
+
+model Setting {
+  key   String @id @unique
+  value String
+
+  @@map("settings")
 }
 
 enum SubscriptionStatus {
@@ -55,136 +276,8 @@ enum SubscriptionStatus {
   PAST_DUE
   CANCELED
   INCOMPLETE
-  LIFETIME_ACCESS 
+  LIFETIME_ACCESS
 }
-
-// Stripe Transactions
-model Transaction {
-  id                  String   @id @default(uuid())
-  amount              Float
-  currency            String
-  status              String   // e.g., "succeeded", "pending", "failed"
-  createdAt           DateTime @default(now())
-
-  // Foreign Key to User
-  userId              String
-  user                User     @relation(fields: [userId], references: [id])
-
-  // Stripe Specific IDs for reference
-  stripeSubscriptionId String?  @unique
-  stripePriceId       String?
-  stripeInvoiceId     String?
-
-  // Fields for managing subscription periods
-  currentPeriodStart  DateTime?
-  currentPeriodEnd    DateTime?
-  cancelAtPeriodEnd   Boolean? @default(false)
-  @@map("transactions")
-}
-
-// Content Creator Information
-model ContentCreator {
-  id          String    @id @default(uuid())
-
-  // Fields from your CSV file (without unique constraints)
-  profileLink String    // From "Profile Link"
-  nickname    String?   // From "Nickname"
-  username    String    // From "Username"
-  country     String    // From "Country"
-  email       String?   // From "Email"
-  instagram   String?   // From "Instagram"
-  youtube     String?   // From "Youtube"
-  followers   Int       @default(0)
-  posts       Int       @default(0)
-  likes       Int       @default(0)
-  bio         String?   @db.Text
-
-  // Relationships
-  regionId    String
-  region      Region?    @relation(fields: [regionId], references: [id])
-
-  nicheId     String?
-  niche       Niche?    @relation(fields: [nicheId], references: [id])
-
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  visitedBy VisitedProfile[] // Relation to VisitedProfile
-
-  @@map("content_creators")
-}
-
-model Region {
-  id              String   @id @default(uuid())
-  name            String   @unique
-  countryName   String?
-  flag      String?
-  contentCreators ContentCreator[]
-
-  @@map("regions")
-}
-
-model Niche {
-  id              String   @id @default(uuid())
-  name            String   @unique
-  contentCreators ContentCreator[]
-
-  @@map("niches")
-}
-
-// User Notifications
-model Notification {
-  id        String   @id @default(uuid())
-  message   String
-  read      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  // Foreign Key to User
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-
-  @@map("notifications")
-}
-
-// User Search History
-model SearchHistory {
-  id        String   @id @default(uuid())
-  keyword   String?
-  country   String? // To store the targeted country for the search
-  createdAt DateTime @default(now())
-
-  // Foreign Key to User
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-
-  @@map("search_history")
-}
-
-// User Visited Profile History
-model VisitedProfile {
-  id        String   @id @default(uuid())
-  visitedAt DateTime @default(now())
-
-  // Foreign Key to User
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-
-  // Foreign Key to ContentCreator
-  creatorId String
-  creator   ContentCreator @relation(fields: [creatorId], references: [id])
-
-  @@map("visited_profiles")
-}
-
-model MigratedFiles {
-  id        String   @id @default(uuid())
-  fileName  String
-  filePath  String
-  migratedAt DateTime @default(now())
-
-  @@map("migrated_files")
-}
-// ENUMS //
 
 enum UserStatus {
   ACTIVE
@@ -197,138 +290,8 @@ enum AccountType {
   ADMIN
 }
 
-// New enum for Content Creator platforms
-enum Platform {
-  TIKTOK
-  INSTAGRAM
-  YOUTUBE
-  FACEBOOK
-}
-
-
 enum Language {
   FR
   EN
   AR
-}
-
-model VideoCourse {
-  id                 String    @id @default(uuid())
-  title              String
-  description        String?   @db.Text
-  order              Int       @default(0)
-  coverImageUrl      String?
-  sections           Section[]
-  priceEur           Float? @default(0)
-  priceUsd           Float? @default(0)
-  priceAed           Float? @default(0)
-  stripePriceIdEur   String?   @unique
-  stripePriceIdUsd   String?   @unique
-  stripePriceIdAed   String?   @unique 
-  language           Language  @default(EN) 
-  purchasedBy        CoursePurchase[]
-  createdAt          DateTime  @default(now())
-  @@map("video_courses")
-}
-
-model CoursePurchase {
-  id            String   @id @default(uuid())
-  purchasePrice Float
-  purchasedAt   DateTime @default(now())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  courseId      String
-  course        VideoCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, courseId])
-  @@map("course_purchases")
-}
-
-model Video {
-  id           String      @id @default(uuid())
-  title        String
-  description  String?     @db.Text
-  vimeoId      String      @db.Text 
-  duration     Int?        // Duration in minutes
-  order        Int         @default(0)
-  progress     VideoProgress[]
-  sectionId    String
-  section      Section     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
-  @@map("videos")
-}
-
-model Section {
-  id        String      @id @default(uuid())
-  title     String
-  order     Int         @default(0)
-  courseId  String
-  course    VideoCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  videos    Video[]
-
-  @@map("course_sections")
-}
-
-model VideoProgress {
-  id          String   @id @default(uuid())
-  
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  videoId     String
-  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
-
-  completed   Boolean  @default(false)
-  completedAt DateTime?
-  
-  @@unique([userId, videoId])
-  @@map("video_progress")
-}
-
-
-model WinningProduct {
-  id                      String    @id @default(uuid())
-  productId               BigInt    @unique // The product ID from AliExpress
-  title                   String?   @db.Text
-  productUrl              String?   @db.Text
-  imageUrl                String?   @db.Text
-  price                   Float?
-  currency                String?   @default("USD")
-  salesVolume             Int?      // The 'lastest_volume' field
-  
-  // --- NEW RICH FIELDS ---
-  categoryName            String?   // To filter by category
-  firstLevelCategoryName  String?   // To filter by parent category
-  historicalData          Json?     // To store sales history { date: "...", sales: 123 }
-  googleTrendKeyword      String?   // A clean, AI-generated keyword for Google Trends.
-
-  source                  String    @default("RapidAPI/AliExpress")
-  importedAt              DateTime  @default(now())
-
-  favoritedBy             UserFavorite[] // Relation to the new UserFavorite model
-  shopName                String?   // To store the shop name
-  shopEvaluationRate      String?   // To store the shop rating (e.g., "93.3%")
-   shopUrl                 String?   @db.Text
-  shopId                  BigInt?
-  @@map("winning_products")
-}
-
-// --- NEW MODEL FOR FAVORITES ---
-model UserFavorite {
-  id          String @id @default(uuid())
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String
-  product     WinningProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productId   String
-  createdAt   DateTime @default(now())
-
-  @@unique([userId, productId]) // A user can only favorite a product once
-  @@map("user_favorites")
-}
-
-
-
-model Setting {
-  key   String @id @unique
-  value String
-
-  @@map("settings")
 }
