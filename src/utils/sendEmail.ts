@@ -71,3 +71,97 @@ export const sendPasswordResetEmail = async (email: string, token: string) => {
     return { success: false, error };
   }
 };
+
+
+
+/**
+ * Sends a purchase confirmation email with training access and invoice link.
+ */
+/**
+ * Sends a purchase confirmation email with training access and invoice link.
+ */
+export const sendPurchaseConfirmationEmail = async (
+    email: string,
+    firstName: string,
+    itemName: string,
+    amount: number,
+    currency: string,
+    invoiceUrl: string | null
+  ) => {
+    const dashboardLink = `${FRONTEND_URL}/dashboard`;
+    // Fallback if currency is missing to avoid crashes
+    const safeCurrency = currency || 'USD';
+    const formattedAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency: safeCurrency.toUpperCase() }).format(amount);
+  
+    try {
+      const response = await resend.emails.send({
+        from: 'Dycom Club <noreply@dycom-club.com>',
+        to: [email],
+        subject: 'Payment Confirmation & Access',
+        html: `
+          <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; background-color: #f9fafb;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+              
+              <!-- Header -->
+              <div style="background-color: #111317; padding: 30px; text-align: center;">
+                 <h2 style="color: #ffffff; margin: 0;">Dycom Club</h2>
+              </div>
+  
+              <!-- Body -->
+              <div style="padding: 30px;">
+                <h2 style="color: #111317; margin-top: 0;">Payment Successful!</h2>
+                <p style="font-size: 16px; line-height: 1.5; color: #4b5563;">
+                  Hi ${firstName},
+                </p>
+                <p style="font-size: 16px; line-height: 1.5; color: #4b5563;">
+                  Thank you for your purchase. We have successfully received your payment for <strong>${itemName}</strong>.
+                </p>
+  
+                <!-- Order Summary -->
+                <div style="background-color: #f3f4f6; border-radius: 8px; padding: 20px; margin: 25px 0;">
+                  <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                      <td style="padding: 5px 0; color: #6b7280; font-size: 14px;">Amount Paid</td>
+                      <td style="padding: 5px 0; color: #111317; font-weight: bold; text-align: right;">${formattedAmount}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 5px 0; color: #6b7280; font-size: 14px;">Plan / Item</td>
+                      <td style="padding: 5px 0; color: #111317; font-weight: bold; text-align: right;">${itemName}</td>
+                    </tr>
+                  </table>
+                </div>
+  
+                <!-- CTA -->
+                <div style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
+                  <a href="${dashboardLink}" style="background-color: #7F56D9; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
+                    Access Dashboard & Training
+                  </a>
+                </div>
+  
+                ${invoiceUrl ? `
+                <p style="text-align: center; font-size: 14px; color: #6b7280;">
+                  Need a receipt? <a href="${invoiceUrl}" style="color: #7F56D9; text-decoration: underline;">Download Invoice</a>
+                </p>
+                ` : ''}
+                
+                <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
+                
+                <p style="font-size: 14px; color: #9ca3af; text-align: center;">
+                  If you have any questions, reply to this email or contact support.
+                </p>
+              </div>
+            </div>
+          </div>
+        `
+      });
+  
+      if (response.error) {
+          console.error('Resend Error:', response.error);
+          return { success: false, error: response.error };
+      }
+      return { success: true, id: response.data?.id };
+    } catch (error) {
+      console.error('Resend Execution Error:', error);
+      return { success: false, error };
+    }
+  };

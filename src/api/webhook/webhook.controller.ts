@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import Stripe from "stripe";
+import { sendPurchaseConfirmationEmail } from "../../utils/sendEmail";
 
 const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
@@ -57,6 +58,21 @@ export const webhookController = {
                     stripeInvoiceId: paymentIntent.id,
                 },
              });
+
+             // --- ASYNC EMAIL (Non-blocking) ---
+             prisma.user.findUnique({ where: { id: metadata.userId } })
+               .then(user => {
+                  if (user) {
+                    sendPurchaseConfirmationEmail(
+                        user.email,
+                        user.firstName,
+                        "Lifetime Membership (One-Time)",
+                        paymentIntent.amount / 100.0,
+                        paymentIntent.currency,
+                        null 
+                    ).catch(e => console.error("Email send failed:", e));
+                  }
+               });
         }
         else if (metadata?.courseId) {
           const { userId, courseId, purchasePrice } = metadata;
@@ -79,6 +95,23 @@ export const webhookController = {
               status: 'succeeded',
               stripeInvoiceId: paymentIntent.id,
             },
+          });
+
+          // --- ASYNC EMAIL (Non-blocking) ---
+          Promise.all([
+            prisma.user.findUnique({ where: { id: userId } }),
+            prisma.videoCourse.findUnique({ where: { id: courseId }, select: { title: true } })
+          ]).then(([user, course]) => {
+             if (user && course) {
+                sendPurchaseConfirmationEmail(
+                    user.email,
+                    user.firstName,
+                    `Course: ${course.title}`,
+                    paymentIntent.amount / 100.0,
+                    paymentIntent.currency,
+                    null
+                ).catch(e => console.error("Email send failed:", e));
+             }
           });
         }
         break;
@@ -117,6 +150,19 @@ export const webhookController = {
         });
 
         console.log(`--- Installment ${updatedUser.installmentsPaid}/${updatedUser.installmentsRequired} paid by User ${user.id} ---`);
+
+        // --- ASYNC EMAIL (Non-blocking) ---
+        // We do NOT await this. It runs in background.
+        const installmentLabel = `Membership Installment (${updatedUser.installmentsPaid}/${updatedUser.installmentsRequired})`;
+        sendPurchaseConfirmationEmail(
+            user.email,
+            user.firstName,
+            installmentLabel,
+            invoice.amount_paid / 100.0,
+            invoice.currency,
+            invoice.hosted_invoice_url 
+        ).catch(e => console.error("Email send failed:", e));
+        // ----------------------------------
 
         // Check for Completion (Lifetime Upgrade)
         if (updatedUser.installmentsPaid >= updatedUser.installmentsRequired && updatedUser.subscriptionStatus !== 'LIFETIME_ACCESS') {
@@ -164,11 +210,8 @@ export const webhookController = {
         }
 
         // CHECK 2: STALE WEBHOOK PROTECTION (THE FIX)
-        // If we already have a Sub ID in DB, and this event is for a DIFFERENT ID,
-        // and this is NOT a 'created' event (which usually means a new sub replacing old one),
-        // then ignore it.
-        if (event.type === 'customer.subscription.updated' && 
-            user.stripeSubscriptionId && 
+        if (event.type === 'customer.subscription.updated' &&
+            user.stripeSubscriptionId &&
             user.stripeSubscriptionId !== subscription.id) {
             console.log(`⚠️ Ignored stale update for old subscription ${subscription.id}. User is already on ${user.stripeSubscriptionId}`);
             break;
@@ -203,7 +246,6 @@ export const webhookController = {
         }
 
         // CHECK 2: STALE WEBHOOK PROTECTION (THE FIX)
-        // If the deleted subscription is NOT the one currently active in our DB, ignore it.
         if (user.stripeSubscriptionId && user.stripeSubscriptionId !== subscription.id) {
              console.log(`⚠️ Ignored deletion of old subscription ${subscription.id}. User is currently on ${user.stripeSubscriptionId}`);
              break;

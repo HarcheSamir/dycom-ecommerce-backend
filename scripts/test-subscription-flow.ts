@@ -1,3 +1,4 @@
+// npx ts-node scripts/test-subscription-flow.ts
 import { PrismaClient } from '@prisma/client';
 import Stripe from 'stripe';
 import 'dotenv/config';
@@ -7,7 +8,7 @@ const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 // Configuration
-const TEST_EMAIL = `test_auto_${Date.now()}@example.com`;
+const TEST_EMAIL = `make.brainers@gmail.com`;
 const INSTALLMENTS_TARGET = 3;
 const DELAY_MS = 20000; // 20 Seconds wait between jumps
 
