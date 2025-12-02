@@ -6,7 +6,7 @@ import {
     createSection, addVideoToSection, updateCourse, deleteCourse,
     updateSection, deleteSection, updateVideo, deleteVideo, updateVideoOrder,
     getSettings, updateSettings,getMembershipPrices, updateMembershipPrices ,    updateSectionOrder,  getAdminUsers, grantLifetimeAccess ,
-    exportAdminUsers 
+    exportAdminUsers , getAdminUserDetails
 
 } from './admin.controller';
 import { getAffiliateLeaderboard } from './affiliate.controller';
@@ -54,6 +54,7 @@ router.get('/financials/stats', getStripeFinancialStats);
 router.get('/financials/customers', getStripeCustomers);
 
 router.get('/users', getAdminUsers);
+router.get('/users/:userId/details', getAdminUserDetails); 
 router.put('/users/:userId/grant-lifetime', grantLifetimeAccess);
 
 

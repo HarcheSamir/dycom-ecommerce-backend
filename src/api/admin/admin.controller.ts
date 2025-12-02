@@ -893,3 +893,94 @@ export const exportAdminUsers = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to export users.' });
     }
 };
+
+
+
+
+
+export const getAdminUserDetails = async (req: Request, res: Response) => {
+    const { userId } = req.params;
+
+    try {
+        // 1. Fetch User with basic relations
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                transactions: { orderBy: { createdAt: 'desc' } },
+                videoProgress: { where: { completed: true } }, // Only get completed videos
+                referrer: true,
+                referrals: true,
+            }
+        });
+
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        // 2. Fetch All Courses to calculate progress
+        const allCourses = await prisma.videoCourse.findMany({
+            include: {
+                sections: {
+                    include: {
+                        videos: { select: { id: true } }
+                    }
+                }
+            }
+        });
+
+        // 3. Calculate Progress Per Course
+        const completedVideoIds = new Set(user.videoProgress.map(vp => vp.videoId));
+
+        const courseProgress = allCourses.map(course => {
+            // Flatten videos in this course
+            const courseVideoIds = course.sections.flatMap(s => s.videos.map(v => v.id));
+            const totalVideos = courseVideoIds.length;
+            
+            if (totalVideos === 0) return null;
+
+            const completedCount = courseVideoIds.filter(vid => completedVideoIds.has(vid)).length;
+            const percentage = Math.round((completedCount / totalVideos) * 100);
+
+            return {
+                id: course.id,
+                title: course.title,
+                coverImageUrl: course.coverImageUrl,
+                totalVideos,
+                completedVideos: completedCount,
+                percentage,
+                status: percentage === 100 ? 'COMPLETED' : percentage > 0 ? 'IN_PROGRESS' : 'NOT_STARTED'
+            };
+        }).filter(c => c !== null); // Filter out empty courses
+
+        // 4. Structure the response
+        const responseData = {
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                accountType: user.accountType,
+                status: user.status,
+                createdAt: user.createdAt,
+                subscriptionStatus: user.subscriptionStatus,
+                installmentsPaid: user.installmentsPaid,
+                installmentsRequired: user.installmentsRequired,
+                stripeCustomerId: user.stripeCustomerId,
+                stripeSubscriptionId: user.stripeSubscriptionId,
+            },
+            financials: {
+                ltv: user.transactions.filter(t => t.status === 'succeeded').reduce((acc, curr) => acc + curr.amount, 0),
+                transactions: user.transactions,
+            },
+            courses: courseProgress,
+            affiliate: {
+                referredBy: user.referrer ? `${user.referrer.firstName} ${user.referrer.lastName}` : null,
+                referralsCount: user.referrals.length
+            }
+        };
+
+        res.status(200).json(responseData);
+
+    } catch (error) {
+        console.error('Error fetching user details:', error);
+        res.status(500).json({ error: 'Failed to fetch user details.' });
+    }
+};
