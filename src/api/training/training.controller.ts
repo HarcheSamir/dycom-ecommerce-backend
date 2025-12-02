@@ -1,11 +1,9 @@
 import { Response } from 'express';
-import { Prisma, Language } from '@prisma/client';
+import { Prisma, Language, SubscriptionStatus } from '@prisma/client'; // Added SubscriptionStatus
 import { prisma } from '../../index';
 import { AuthenticatedRequest } from '../../utils/AuthRequestType';
 
-/**
- * @description Fetches all video courses with updated progress calculation across sections.
- */
+// ... (getAllCourses remains the same) ...
 export const getAllCourses = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -90,7 +88,7 @@ export const getAllCourses = async (req: AuthenticatedRequest, res: Response) =>
 };
 
 /**
- * @description Get Course Details with FULL user progress to enable "Resume" functionality.
+ * @description Get Course Details. Grants access to Admins & Subscribers automatically.
  */
 export const getCourseById = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -113,14 +111,12 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
                                 vimeoId: true,
                                 duration: true,
                                 order: true,
-                                // Return the specific progress for this user
                                 progress: {
                                     where: { userId },
                                     select: {
                                         completed: true,
                                         lastPosition: true,
                                         percentage: true,
-                                        // Removed updatedAt as it does not exist in schema
                                     }
                                 }
                             },
@@ -143,14 +139,26 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Course not found.' });
     }
 
-    const isSubscriber = user?.subscriptionStatus === 'ACTIVE';
-    const hasPurchased = (user?.coursePurchases?.length ?? 0) > 0;
+    // --- ACCESS LOGIC ---
     const isAdmin = user?.accountType === 'ADMIN';
-    const isFreeCourse = (course.priceEur === null || course.priceEur === 0) && (course.priceUsd === null || course.priceUsd === 0);
-    const hasAccess = isAdmin || hasPurchased || (isSubscriber && isFreeCourse);
+    
+    // Check if user has an active membership (Active, Lifetime, or Trial)
+    const isSubscriber = 
+        user?.subscriptionStatus === SubscriptionStatus.ACTIVE || 
+        user?.subscriptionStatus === SubscriptionStatus.LIFETIME_ACCESS || 
+        user?.subscriptionStatus === SubscriptionStatus.TRIALING;
+
+    // Check if they bought it individually (Legacy or Non-Subscribers)
+    const hasPurchased = (user?.coursePurchases?.length ?? 0) > 0;
+
+    // Check if the course is free for everyone (Price 0)
+    const isGlobalFree = (course.priceEur === null || course.priceEur === 0) && (course.priceUsd === null || course.priceUsd === 0);
+
+    // GRANT ACCESS IF ANY CONDITION IS MET
+    const hasAccess = isAdmin || isSubscriber || hasPurchased || isGlobalFree;
 
     if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied.' });
+      return res.status(403).json({ error: 'Access denied. Please subscribe or purchase this course.' });
     }
 
     return res.status(200).json(course);
@@ -160,25 +168,20 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
   }
 };
 
-/**
- * @description Updates progress. Handles "Completed" logic based on threshold.
- */
+// ... (updateVideoProgress remains the same as before) ...
 export const updateVideoProgress = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { videoId } = req.params;
     const userId = req.user!.userId;
     const { lastPosition, percentage } = req.body;
 
-    // 1. Determine if completed based on percentage (95% threshold)
-    const isCompleted = Number(percentage) >= 80;
+    const isCompleted = Number(percentage) >= 95;
 
     const updateData: any = {
       lastPosition: Number(lastPosition),
       percentage: Number(percentage),
-      // Removed updatedAt manual setting
     };
 
-    // Only mark completed, never un-mark it automatically
     if (isCompleted) {
         updateData.completed = true;
         updateData.completedAt = new Date();

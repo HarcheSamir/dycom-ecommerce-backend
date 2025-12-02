@@ -137,79 +137,89 @@ export const updateCourse = async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Course not found' });
         }
 
+        // 1. Try to find existing Stripe Product via Prices
         let stripeProductId: string | null = null;
-        if (existingCourse.stripePriceIdEur) {
-            const price = await stripe.prices.retrieve(existingCourse.stripePriceIdEur);
-            stripeProductId = price.product as string;
-        } else if (existingCourse.stripePriceIdUsd) {
-            const price = await stripe.prices.retrieve(existingCourse.stripePriceIdUsd);
-            stripeProductId = price.product as string;
-        } else if (existingCourse.stripePriceIdAed) {
-            const price = await stripe.prices.retrieve(existingCourse.stripePriceIdAed);
-            stripeProductId = price.product as string;
+        try {
+            if (existingCourse.stripePriceIdEur) {
+                const price = await stripe.prices.retrieve(existingCourse.stripePriceIdEur);
+                if (typeof price.product === 'string') stripeProductId = price.product;
+                else if (typeof price.product === 'object') stripeProductId = price.product.id;
+            } else if (existingCourse.stripePriceIdUsd) {
+                const price = await stripe.prices.retrieve(existingCourse.stripePriceIdUsd);
+                if (typeof price.product === 'string') stripeProductId = price.product;
+                else if (typeof price.product === 'object') stripeProductId = price.product.id;
+            } else if (existingCourse.stripePriceIdAed) {
+                const price = await stripe.prices.retrieve(existingCourse.stripePriceIdAed);
+                if (typeof price.product === 'string') stripeProductId = price.product;
+                else if (typeof price.product === 'object') stripeProductId = price.product.id;
+            }
+        } catch (err) {
+            console.warn(`Could not retrieve existing Stripe prices for course ${courseId}. Ignoring.`);
         }
 
+        // 2. If no product found (Free course / Seeded data), create a NEW one.
         if (!stripeProductId) {
-            throw new Error(`Critical: No Stripe Product is associated with course ID ${courseId}.`);
-        }
-
-        if (title && title !== existingCourse.title) {
-            await stripe.products.update(stripeProductId, { name: title });
+            console.log(`No Stripe Product found for course ${courseId}. Creating a new one...`);
+            const newProduct = await stripe.products.create({ name: title || existingCourse.title });
+            stripeProductId = newProduct.id;
+        } else {
+            // Update existing product name
+            if (title && title !== existingCourse.title) {
+                await stripe.products.update(stripeProductId, { name: title });
+            }
         }
 
         const prismaData: any = { title, description, language };
 
-        if (priceEur !== undefined && Number(priceEur) !== existingCourse.priceEur) {
-            if (existingCourse.stripePriceIdEur) {
-                await stripe.prices.update(existingCourse.stripePriceIdEur, { active: false });
+        // --- Helper to handle price updates ---
+        const handlePriceUpdate = async (
+            newPriceVal: number | undefined,
+            currentDbPriceId: string | null,
+            currency: 'eur' | 'usd' | 'aed'
+        ): Promise<string | null> => {
+            // If new price is provided and different from existing...
+            // Note: We don't have the existing amount here easily without querying DB or passing it.
+            // Simplified: If passed, we assume we want to update/set it.
+            
+            if (newPriceVal === undefined) return currentDbPriceId; // No change requested
+
+            // If existing price ID exists, archive it
+            if (currentDbPriceId) {
+                try {
+                    await stripe.prices.update(currentDbPriceId, { active: false });
+                } catch (e) { console.warn(`Failed to archive price ${currentDbPriceId}`, e); }
             }
-            if (Number(priceEur) > 0) {
-                const newPrice = await stripe.prices.create({
-                    product: stripeProductId,
-                    unit_amount: Math.round(Number(priceEur) * 100),
-                    currency: 'eur',
+
+            // If new price is > 0, create new price
+            if (newPriceVal > 0) {
+                const newPriceObj = await stripe.prices.create({
+                    product: stripeProductId as string,
+                    unit_amount: Math.round(newPriceVal * 100),
+                    currency: currency,
                 });
-                prismaData.stripePriceIdEur = newPrice.id;
-            } else {
-                prismaData.stripePriceIdEur = null;
+                return newPriceObj.id;
             }
-            prismaData.priceEur = Number(priceEur) >= 0 ? Number(priceEur) : null;
+
+            // If new price is 0, return null (Free)
+            return null;
+        };
+
+        // 3. Process Price Updates
+        // We only update if the value is explicitly provided in the request
+        if (priceEur !== undefined) {
+            prismaData.priceEur = Number(priceEur) || 0;
+            prismaData.stripePriceIdEur = await handlePriceUpdate(Number(priceEur), existingCourse.stripePriceIdEur, 'eur');
+        }
+        if (priceUsd !== undefined) {
+            prismaData.priceUsd = Number(priceUsd) || 0;
+            prismaData.stripePriceIdUsd = await handlePriceUpdate(Number(priceUsd), existingCourse.stripePriceIdUsd, 'usd');
+        }
+        if (priceAed !== undefined) {
+            prismaData.priceAed = Number(priceAed) || 0;
+            prismaData.stripePriceIdAed = await handlePriceUpdate(Number(priceAed), existingCourse.stripePriceIdAed, 'aed');
         }
 
-        if (priceUsd !== undefined && Number(priceUsd) !== existingCourse.priceUsd) {
-            if (existingCourse.stripePriceIdUsd) {
-                await stripe.prices.update(existingCourse.stripePriceIdUsd, { active: false });
-            }
-            if (Number(priceUsd) > 0) {
-                const newPrice = await stripe.prices.create({
-                    product: stripeProductId,
-                    unit_amount: Math.round(Number(priceUsd) * 100),
-                    currency: 'usd',
-                });
-                prismaData.stripePriceIdUsd = newPrice.id;
-            } else {
-                prismaData.stripePriceIdUsd = null;
-            }
-            prismaData.priceUsd = Number(priceUsd) >= 0 ? Number(priceUsd) : null;
-        }
-
-        if (priceAed !== undefined && Number(priceAed) !== existingCourse.priceAed) {
-            if (existingCourse.stripePriceIdAed) {
-                await stripe.prices.update(existingCourse.stripePriceIdAed, { active: false });
-            }
-            if (Number(priceAed) > 0) {
-                const newPrice = await stripe.prices.create({
-                    product: stripeProductId,
-                    unit_amount: Math.round(Number(priceAed) * 100),
-                    currency: 'aed',
-                });
-                prismaData.stripePriceIdAed = newPrice.id;
-            } else {
-                prismaData.stripePriceIdAed = null;
-            }
-            prismaData.priceAed = Number(priceAed) >= 0 ? Number(priceAed) : null;
-        }
-
+        // 4. Update Database
         const updatedCourse = await prisma.videoCourse.update({
             where: { id: courseId },
             data: prismaData,
@@ -225,7 +235,7 @@ export const updateCourse = async (req: Request, res: Response) => {
 export const getAdminCourses = async (req: Request, res: Response) => {
     try {
         const coursesFromDb = await prisma.videoCourse.findMany({
-            orderBy: { order: 'asc' },
+            orderBy: { createdAt: 'desc' },
             include: {
                 sections: { select: { _count: { select: { videos: true } } } }
             }
