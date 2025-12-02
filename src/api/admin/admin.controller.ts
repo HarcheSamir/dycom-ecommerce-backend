@@ -607,10 +607,8 @@ export const getAdminUsers = async (req: Request, res: Response) => {
         const { page = 1, limit = 20, search, status, installments } = req.query;
         const skip = (Number(page) - 1) * Number(limit);
 
-        // Use an AND array to safely combine multiple conditions
         const andConditions: any[] = [];
 
-        // 1. Search Filter
         if (search) {
             andConditions.push({
                 OR: [
@@ -621,28 +619,20 @@ export const getAdminUsers = async (req: Request, res: Response) => {
             });
         }
 
-        // 2. Status Filter
         if (status && status !== 'ALL') {
             andConditions.push({ subscriptionStatus: String(status) });
         }
 
-        // 3. Installments/Plan Filter
         if (installments && installments !== 'ALL') {
             if (installments === 'LIFETIME') {
-                // If filtering for Lifetime, we specifically look for the status
                 andConditions.push({ subscriptionStatus: 'LIFETIME_ACCESS' });
             } else {
-                // If filtering for 2 or 3 installments
                 const count = Number(installments);
                 andConditions.push({ installmentsRequired: count });
-                
-                // Ensure we don't accidentally pick up a weird lifetime user with 2 installments setup
-                // (Though logically impossible, this keeps it clean)
                 andConditions.push({ subscriptionStatus: { not: 'LIFETIME_ACCESS' } });
             }
         }
 
-        // Construct the final where object
         const where = andConditions.length > 0 ? { AND: andConditions } : {};
 
         const [users, total] = await prisma.$transaction([
@@ -656,19 +646,71 @@ export const getAdminUsers = async (req: Request, res: Response) => {
                     firstName: true,
                     lastName: true,
                     email: true,
+                    status: true,
+                    accountType: true,
                     subscriptionStatus: true,
                     installmentsPaid: true,
                     installmentsRequired: true,
-                    createdAt: true,
+                    createdAt: true,        // Account Creation Date
+                    currentPeriodEnd: true, 
                     stripeSubscriptionId: true,
                     stripeCustomerId: true,
+                    referrer: {
+                        select: {
+                            id: true,
+                            email: true,
+                            firstName: true,
+                            lastName: true
+                        }
+                    },
+                    // Fetch ALL successful transactions for history & LTV
+                    transactions: {
+                        where: { status: 'succeeded' },
+                        select: {
+                            amount: true,
+                            createdAt: true,
+                            currency: true
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    },
+                    _count: {
+                        select: {
+                            referrals: true,
+                            coursePurchases: true,
+                            searchHistory: true
+                        }
+                    }
                 }
             }),
             prisma.user.count({ where })
         ]);
 
+        const enrichedUsers = await Promise.all(users.map(async (user) => {
+            const ltv = user.transactions.reduce((sum, tx) => sum + tx.amount, 0);
+            
+            // Map transactions to a clean history array
+            const paymentHistory = user.transactions.map(tx => ({
+                date: tx.createdAt,
+                amount: tx.amount,
+                currency: tx.currency
+            }));
+
+            return {
+                ...user,
+                ltv,
+                paymentHistory, // <--- RETURN FULL HISTORY
+                stats: {
+                    referrals: user._count.referrals,
+                    purchases: user._count.coursePurchases,
+                    searches: user._count.searchHistory
+                },
+                transactions: undefined, 
+                _count: undefined
+            };
+        }));
+
         res.status(200).json({
-            data: users,
+            data: enrichedUsers,
             meta: { total, page: Number(page), limit: Number(limit), totalPages: Math.ceil(total / Number(limit)) }
         });
 
@@ -713,5 +755,141 @@ export const grantLifetimeAccess = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error granting lifetime access:', error);
         res.status(500).json({ error: 'Failed to update user.' });
+    }
+};
+
+
+
+
+export const exportAdminUsers = async (req: Request, res: Response) => {
+    try {
+        const { search, status, installments } = req.query;
+
+        // 1. Filtering Logic
+        const andConditions: any[] = [];
+
+        if (search) {
+            andConditions.push({
+                OR: [
+                    { email: { contains: String(search) } },
+                    { firstName: { contains: String(search) } },
+                    { lastName: { contains: String(search) } },
+                ]
+            });
+        }
+
+        if (status && status !== 'ALL') {
+            andConditions.push({ subscriptionStatus: String(status) });
+        }
+
+        if (installments && installments !== 'ALL') {
+            if (installments === 'LIFETIME') {
+                andConditions.push({ subscriptionStatus: 'LIFETIME_ACCESS' });
+            } else {
+                const count = Number(installments);
+                andConditions.push({ installmentsRequired: count });
+                andConditions.push({ subscriptionStatus: { not: 'LIFETIME_ACCESS' } });
+            }
+        }
+
+        const where = andConditions.length > 0 ? { AND: andConditions } : {};
+
+        // 2. Fetch Users + Transactions
+        const users = await prisma.user.findMany({
+            where,
+            orderBy: { createdAt: 'desc' },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                subscriptionStatus: true,
+                installmentsPaid: true,
+                installmentsRequired: true,
+                createdAt: true,
+                currentPeriodEnd: true,
+                // Removed referrer and _count select as they are no longer needed for CSV
+                transactions: {
+                    where: { status: 'succeeded' },
+                    select: { amount: true, createdAt: true },
+                    orderBy: { createdAt: 'asc' } // Oldest first to map Payment 1, 2, 3 correctly
+                }
+            }
+        });
+
+        // 3. Define CSV Headers (Removed Referrer, Searches, Courses)
+        const csvHeaders = [
+            'ID',
+            'First Name',
+            'Last Name',
+            'Email',
+            'Status',
+            'Progress (Paid)',
+            'Progress (Total)',
+            'LTV (EUR)',
+            'Payment 1 Date',
+            'Payment 2 Date',
+            'Payment 3 Date',
+            'Joined Date',
+            'Next Billing'
+        ];
+
+        // 4. Build CSV Rows
+        const headerRow = csvHeaders.join(',') + '\r\n';
+
+        const csvRows = users.map(user => {
+            const ltv = user.transactions.reduce((sum, tx) => sum + tx.amount, 0);
+            const joinedDate = new Date(user.createdAt).toISOString();
+            const nextBill = user.currentPeriodEnd ? new Date(user.currentPeriodEnd).toISOString() : '';
+
+            // --- Payment Columns Logic ---
+            const getPaymentInfo = (index: number) => {
+                // If transaction exists at this index
+                if (user.transactions[index]) {
+                    return new Date(user.transactions[index].createdAt).toISOString();
+                }
+                
+                // If transaction doesn't exist, determine why:
+                // 1. Is it required by their plan?
+                if ((index + 1) <= user.installmentsRequired) {
+                    return 'Pending'; // Plan requires it, but hasn't paid yet
+                }
+                
+                // 2. Not required (e.g., asking for Payment 2 on a 1-month plan)
+                return 'N/A';
+            };
+
+            const p1 = getPaymentInfo(0);
+            const p2 = getPaymentInfo(1);
+            const p3 = getPaymentInfo(2);
+
+            const row = [
+                user.id,
+                `"${user.firstName}"`,
+                `"${user.lastName}"`,
+                user.email,
+                user.subscriptionStatus,
+                user.installmentsPaid,
+                user.installmentsRequired,
+                ltv.toFixed(2),
+                p1, // Payment 1
+                p2, // Payment 2
+                p3, // Payment 3
+                joinedDate,
+                nextBill
+            ];
+            return row.join(',');
+        }).join('\r\n');
+
+        const csvContent = headerRow + csvRows;
+
+        // 5. Send Response
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="admin_users_export_${Date.now()}.csv"`);
+        res.status(200).end(csvContent);
+
+    } catch (error) {
+        console.error('Error exporting users:', error);
+        res.status(500).json({ error: 'Failed to export users.' });
     }
 };

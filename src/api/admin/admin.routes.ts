@@ -5,18 +5,20 @@ import {
     getAdminDashboardStats, createCourse, getAdminCourses, getCourseDetails,
     createSection, addVideoToSection, updateCourse, deleteCourse,
     updateSection, deleteSection, updateVideo, deleteVideo, updateVideoOrder,
-    getSettings, updateSettings,getMembershipPrices, updateMembershipPrices ,    updateSectionOrder,  getAdminUsers, grantLifetimeAccess 
+    getSettings, updateSettings,getMembershipPrices, updateMembershipPrices ,    updateSectionOrder,  getAdminUsers, grantLifetimeAccess ,
+    exportAdminUsers 
 
 } from './admin.controller';
-// ==================== THIS IS THE FIX: Re-import the controller ====================
 import { getAffiliateLeaderboard } from './affiliate.controller';
-// ===================================================================================
 import { getStripeFinancialStats, getStripeCustomers } from './stripe.controller';
 
 const router = Router();
 
 // Stats
 router.get('/stats', getAdminDashboardStats);
+
+router.get('/users/export', exportAdminUsers); 
+
 
 // Course Management
 router.get('/courses', getAdminCourses);
@@ -38,9 +40,7 @@ router.put('/videos/:videoId', updateVideo);
 router.delete('/videos/:videoId', deleteVideo);
 router.put('/sections/:sectionId/videos/order', updateVideoOrder);
 
-// ==================== THIS IS THE FIX: Restore the route ====================
 router.get('/affiliates/leaderboard', getAffiliateLeaderboard);
-// ============================================================================
 
 router.get('/membership-prices', getMembershipPrices);
 router.put('/membership-prices', updateMembershipPrices);
@@ -55,5 +55,7 @@ router.get('/financials/customers', getStripeCustomers);
 
 router.get('/users', getAdminUsers);
 router.put('/users/:userId/grant-lifetime', grantLifetimeAccess);
+
+
 
 export default router;

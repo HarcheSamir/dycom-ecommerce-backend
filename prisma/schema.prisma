@@ -49,7 +49,7 @@ model Transaction {
   status               String
   createdAt            DateTime  @default(now())
   userId               String
-  stripeSubscriptionId String?   @unique
+  stripeSubscriptionId String?   
   stripePriceId        String?
   stripeInvoiceId      String?
   currentPeriodStart   DateTime?
