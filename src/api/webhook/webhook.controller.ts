@@ -1,5 +1,3 @@
-//  ./src/api/webhook/webhook.controller.ts
-
 import { Request, Response } from "express";
 import { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import Stripe from "stripe";
@@ -34,25 +32,22 @@ export const webhookController = {
 
     switch (event.type) {
 
-      // === 1. ONE-TIME PAYMENT SUCCESS (For 1x Plan or Courses) ===
+      // === 1. ONE-TIME PAYMENT SUCCESS ===
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as any;
         const metadata = paymentIntent.metadata;
 
-        // A. Handle Membership (1x Full Payment)
         if (metadata?.type === 'MEMBERSHIP_FULL' && metadata?.userId) {
              console.log(`--- Membership Full Payment for User ${metadata.userId} ---`);
-             
              await prisma.user.update({
                  where: { id: metadata.userId },
                  data: {
                      subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS,
                      installmentsPaid: 1,
                      installmentsRequired: 1,
-                     stripeSubscriptionId: null // No sub for one-time
+                     stripeSubscriptionId: null
                  }
              });
-             
              await prisma.transaction.create({
                 data: {
                     userId: metadata.userId,
@@ -63,7 +58,6 @@ export const webhookController = {
                 },
              });
         }
-        // B. Handle Course Purchase (Existing Logic)
         else if (metadata?.courseId) {
           const { userId, courseId, purchasePrice } = metadata;
           if (!userId || !courseId || !purchasePrice) break;
@@ -90,21 +84,20 @@ export const webhookController = {
         break;
       }
 
-      // === 2. SUBSCRIPTION PAYMENT SUCCESS (For 2x or 3x Plans) ===
+      // === 2. SUBSCRIPTION PAYMENT SUCCESS ===
       case 'invoice.payment_succeeded': {
         const invoice = event.data.object as any;
-        // Ignore invoices for one-time payments (usually billing_reason='manual' or null subscription)
-        if (!invoice.subscription) break; 
-        
+        if (!invoice.subscription) break;
+
         const customerId = invoice.customer as string;
         const user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } });
-        
+
         if (!user) {
           console.error(`Webhook Error: User not found for customer ID ${customerId}`);
           break;
         }
 
-        // 1. Record Transaction
+        // Record Transaction
         await prisma.transaction.create({
           data: {
             userId: user.id,
@@ -116,8 +109,7 @@ export const webhookController = {
           },
         });
 
-        // 2. Increment Installment Count
-        // NOTE: We rely on the increment to track progress.
+        // Increment Installment Count
         const updatedUser = await prisma.user.update({
             where: { id: user.id },
             data: { installmentsPaid: { increment: 1 } },
@@ -126,18 +118,13 @@ export const webhookController = {
 
         console.log(`--- Installment ${updatedUser.installmentsPaid}/${updatedUser.installmentsRequired} paid by User ${user.id} ---`);
 
-        // 3. CHECK FOR COMPLETION
-        // If they have paid enough installments, Grant Lifetime & Cancel Stripe
+        // Check for Completion (Lifetime Upgrade)
         if (updatedUser.installmentsPaid >= updatedUser.installmentsRequired && updatedUser.subscriptionStatus !== 'LIFETIME_ACCESS') {
             console.log(`!!! USER ${user.id} HAS COMPLETED PAYMENTS. UPGRADING TO LIFETIME. !!!`);
-            
-            // A. Update DB
             await prisma.user.update({
                 where: { id: user.id },
                 data: { subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS }
             });
-
-            // B. Cancel Stripe Subscription immediately (so they aren't charged again)
             try {
                 await stripe.subscriptions.cancel(invoice.subscription);
                 console.log(`--- Stripe Subscription ${invoice.subscription} cancelled (Goal reached) ---`);
@@ -145,24 +132,23 @@ export const webhookController = {
                 console.error(`Failed to cancel subscription for user ${user.id} after completion:`, err);
             }
         }
-        
-        // 4. Affiliate Logic (Existing)
+
+        // Affiliate Logic
         if (user.referredById) {
              const previousTransactions = await prisma.transaction.count({
                 where: { userId: user.id, status: 'succeeded' }
               });
               if (previousTransactions <= 1) {
-                  // ... (Existing affiliate logic remains unchanged)
                    await prisma.user.update({
                       where: { id: user.referredById },
                       data: { availableCourseDiscounts: { increment: 1 } }
                     });
-                    // ... (Notification logic)
               }
         }
         break;
       }
 
+      // === 3. SUBSCRIPTION UPDATES ===
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
@@ -171,11 +157,21 @@ export const webhookController = {
         const user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } });
         if (!user) break;
 
-        // === CRITICAL SAFETY CHECK ===
-        // If user is already LIFETIME, do NOT revert them to Active/Canceled based on Stripe events.
+        // CHECK 1: LIFETIME PROTECTION
         if (user.subscriptionStatus === SubscriptionStatus.LIFETIME_ACCESS) {
              console.log(`Ignored update for Lifetime User ${user.id}`);
              break;
+        }
+
+        // CHECK 2: STALE WEBHOOK PROTECTION (THE FIX)
+        // If we already have a Sub ID in DB, and this event is for a DIFFERENT ID,
+        // and this is NOT a 'created' event (which usually means a new sub replacing old one),
+        // then ignore it.
+        if (event.type === 'customer.subscription.updated' && 
+            user.stripeSubscriptionId && 
+            user.stripeSubscriptionId !== subscription.id) {
+            console.log(`⚠️ Ignored stale update for old subscription ${subscription.id}. User is already on ${user.stripeSubscriptionId}`);
+            break;
         }
 
         const subscriptionStatus = mapStripeStatusToPrismaStatus(subscription.status);
@@ -193,22 +189,27 @@ export const webhookController = {
         break;
       }
 
+      // === 4. SUBSCRIPTION DELETION ===
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription;
-        const customerId = subscription.customer as string; // Safer lookup
-        
+        const customerId = subscription.customer as string;
+
         const user = await prisma.user.findFirst({ where: { stripeCustomerId: customerId } });
         if (!user) break;
 
-        // === THE SAFETY VALVE ===
-        // We just canceled the sub because they finished paying. 
-        // Stripe sends "deleted". We MUST ignore this if they are Lifetime.
+        // CHECK 1: LIFETIME PROTECTION
         if (user.subscriptionStatus === SubscriptionStatus.LIFETIME_ACCESS) {
-            console.log(`--- Safety Valve: Ignored 'subscription.deleted' for Lifetime User ${user.id} ---`);
             break;
         }
 
-        // Otherwise, it was a real cancellation (did not pay, or manually cancelled)
+        // CHECK 2: STALE WEBHOOK PROTECTION (THE FIX)
+        // If the deleted subscription is NOT the one currently active in our DB, ignore it.
+        if (user.stripeSubscriptionId && user.stripeSubscriptionId !== subscription.id) {
+             console.log(`⚠️ Ignored deletion of old subscription ${subscription.id}. User is currently on ${user.stripeSubscriptionId}`);
+             break;
+        }
+
+        // Otherwise, it was a real cancellation
         await prisma.user.update({
           where: { id: user.id },
           data: {
