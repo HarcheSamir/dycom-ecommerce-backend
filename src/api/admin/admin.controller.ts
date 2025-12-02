@@ -774,6 +774,7 @@ export const exportAdminUsers = async (req: Request, res: Response) => {
                     { email: { contains: String(search) } },
                     { firstName: { contains: String(search) } },
                     { lastName: { contains: String(search) } },
+                    { phone: { contains: String(search) } }, // Added phone to search too
                 ]
             });
         }
@@ -803,26 +804,27 @@ export const exportAdminUsers = async (req: Request, res: Response) => {
                 firstName: true,
                 lastName: true,
                 email: true,
+                phone: true, // <--- ADDED THIS
                 subscriptionStatus: true,
                 installmentsPaid: true,
                 installmentsRequired: true,
                 createdAt: true,
                 currentPeriodEnd: true,
-                // Removed referrer and _count select as they are no longer needed for CSV
                 transactions: {
                     where: { status: 'succeeded' },
                     select: { amount: true, createdAt: true },
-                    orderBy: { createdAt: 'asc' } // Oldest first to map Payment 1, 2, 3 correctly
+                    orderBy: { createdAt: 'asc' }
                 }
             }
         });
 
-        // 3. Define CSV Headers (Removed Referrer, Searches, Courses)
+        // 3. Define CSV Headers
         const csvHeaders = [
             'ID',
             'First Name',
             'Last Name',
             'Email',
+            'Phone', // <--- ADDED COLUMN HEADER
             'Status',
             'Progress (Paid)',
             'Progress (Total)',
@@ -844,18 +846,12 @@ export const exportAdminUsers = async (req: Request, res: Response) => {
 
             // --- Payment Columns Logic ---
             const getPaymentInfo = (index: number) => {
-                // If transaction exists at this index
                 if (user.transactions[index]) {
                     return new Date(user.transactions[index].createdAt).toISOString();
                 }
-                
-                // If transaction doesn't exist, determine why:
-                // 1. Is it required by their plan?
                 if ((index + 1) <= user.installmentsRequired) {
-                    return 'Pending'; // Plan requires it, but hasn't paid yet
+                    return 'Pending';
                 }
-                
-                // 2. Not required (e.g., asking for Payment 2 on a 1-month plan)
                 return 'N/A';
             };
 
@@ -868,13 +864,14 @@ export const exportAdminUsers = async (req: Request, res: Response) => {
                 `"${user.firstName}"`,
                 `"${user.lastName}"`,
                 user.email,
+                user.phone || '', // <--- ADDED VALUE (Handle nulls)
                 user.subscriptionStatus,
                 user.installmentsPaid,
                 user.installmentsRequired,
                 ltv.toFixed(2),
-                p1, // Payment 1
-                p2, // Payment 2
-                p3, // Payment 3
+                p1,
+                p2,
+                p3,
                 joinedDate,
                 nextBill
             ];
@@ -957,6 +954,7 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
                 email: user.email,
                 firstName: user.firstName,
                 lastName: user.lastName,
+                phone: user.phone,
                 accountType: user.accountType,
                 status: user.status,
                 createdAt: user.createdAt,

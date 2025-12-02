@@ -20,7 +20,7 @@ function exclude<User, Key extends keyof User>(
 
 export const authService = {
   async signUp(userData: any) {
-    const { email, password, firstName, lastName, refCode } = userData;
+    const { email, password, firstName, lastName, refCode, phone } = userData;
 
 
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
@@ -31,6 +31,7 @@ export const authService = {
         password: hashedPassword,
         firstName,
         lastName,
+        phone,
         accountType: 'USER',
       },
     });

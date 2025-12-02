@@ -21,6 +21,7 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
         email: true,
         firstName: true,
         lastName: true,
+        phone: true,
         status: true,
         accountType: true,
         createdAt: true,
@@ -88,24 +89,24 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
         // It's okay to fail here, we just don't show plan details
       }
     } else if (userProfile.subscriptionStatus === SubscriptionStatus.LIFETIME_ACCESS) {
-        // Hardcode display for Lifetime
-        planDetails = {
-            name: "Lifetime Membership",
-            amount: 0, 
-            currency: "eur",
-            interval: "one-time"
-        };
+      // Hardcode display for Lifetime
+      planDetails = {
+        name: "Lifetime Membership",
+        amount: 0,
+        currency: "eur",
+        interval: "one-time"
+      };
     }
 
     const totalSearchCount = await prisma.searchHistory.count({
       where: { userId: userId },
     });
-    
+
     // Logic for "Has Paid" includes Lifetime
-    const isPayingMember = 
-        userProfile.subscriptionStatus === 'ACTIVE' || 
-        userProfile.subscriptionStatus === 'TRIALING' ||
-        userProfile.subscriptionStatus === 'LIFETIME_ACCESS';
+    const isPayingMember =
+      userProfile.subscriptionStatus === 'ACTIVE' ||
+      userProfile.subscriptionStatus === 'TRIALING' ||
+      userProfile.subscriptionStatus === 'LIFETIME_ACCESS';
 
     const responseData: any = {
       ...userProfile,
@@ -117,8 +118,8 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
       totalVisitsCount: userProfile.visitedProfiles.length,
       // Helper for UI progress bar (e.g., "Payment 1 of 3")
       progress: {
-          paid: userProfile.installmentsPaid,
-          total: userProfile.installmentsRequired
+        paid: userProfile.installmentsPaid,
+        total: userProfile.installmentsRequired
       }
     };
 
@@ -213,7 +214,7 @@ export const updateUserProfile = async (req: AuthenticatedRequest, res: Response
       return res.status(401).json({ error: 'Unauthorized. Please log in.' });
     }
     const { userId } = req.user;
-    const { firstName, lastName } = req.body;
+    const { firstName, lastName, phone } = req.body;
 
     // 2. Input Validation
     if (!firstName || !lastName || firstName.trim() === '' || lastName.trim() === '') {
@@ -226,6 +227,8 @@ export const updateUserProfile = async (req: AuthenticatedRequest, res: Response
       data: {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        phone: phone ? phone.trim() : null,
+
       },
       // Select the fields to return, excluding the password
       select: {
@@ -233,6 +236,7 @@ export const updateUserProfile = async (req: AuthenticatedRequest, res: Response
         email: true,
         firstName: true,
         lastName: true,
+        phone: true,
         status: true,
         accountType: true,
         createdAt: true,
