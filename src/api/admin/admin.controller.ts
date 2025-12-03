@@ -982,3 +982,198 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
         res.status(500).json({ error: 'Failed to fetch user details.' });
     }
 };
+
+
+
+
+
+
+
+
+
+
+/**
+ * @description Manually update user subscription fields (Status, Installments).
+ */
+export const updateUserSubscription = async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const { subscriptionStatus, installmentsPaid, installmentsRequired } = req.body;
+
+    try {
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: {
+                subscriptionStatus: subscriptionStatus as SubscriptionStatus,
+                installmentsPaid: Number(installmentsPaid),
+                installmentsRequired: Number(installmentsRequired)
+            }
+        });
+        res.status(200).json(updatedUser);
+    } catch (error) {
+        console.error('Error updating user subscription manually:', error);
+        res.status(500).json({ error: 'Failed to update user.' });
+    }
+};
+
+
+
+
+
+
+
+/**
+ * @description Syncs a user to a specific Stripe Subscription ID.
+ * Verifies existence in Stripe first, checks for DB conflicts, then updates.
+ */
+export const syncStripeSubscription = async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const { stripeSubscriptionId } = req.body;
+
+    if (!stripeSubscriptionId) {
+        return res.status(400).json({ error: 'Stripe Subscription ID is required.' });
+    }
+
+    try {
+        // 1. Verify with Stripe
+        let subscription: any;
+        try {
+            subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+        } catch (err) {
+            return res.status(404).json({ error: 'Subscription ID not found in Stripe.' });
+        }
+
+        const customerId = subscription.customer as string;
+
+        // 2. Check for Conflicts
+        const conflictingUser = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { stripeCustomerId: customerId },
+                    { stripeSubscriptionId: subscription.id }
+                ],
+                NOT: { id: userId }
+            },
+            select: { email: true }
+        });
+
+        if (conflictingUser) {
+            return res.status(409).json({ 
+                error: `Conflict: This Stripe data is linked to ${conflictingUser.email}` 
+            });
+        }
+
+        // 3. Map Status
+        const statusMap: { [key: string]: SubscriptionStatus } = {
+            'trialing': 'TRIALING',
+            'active': 'ACTIVE',
+            'past_due': 'PAST_DUE',
+            'canceled': 'CANCELED',
+            'incomplete': 'INCOMPLETE',
+            'incomplete_expired': 'CANCELED',
+            'unpaid': 'CANCELED',
+        };
+        const prismaStatus = statusMap[subscription.status] || 'INCOMPLETE';
+
+        // 4. Robust Date Parsing (Priority: Root -> Item[0])
+        let rawPeriodEnd = subscription.current_period_end;
+
+        // FIX: If missing at root, grab from the first subscription item
+        if (!rawPeriodEnd && subscription.items?.data?.[0]?.current_period_end) {
+            rawPeriodEnd = subscription.items.data[0].current_period_end;
+        }
+
+        const timestamp = Number(rawPeriodEnd);
+        let dateObj: Date | null = null;
+
+        // Only create Date if timestamp is valid positive number
+        if (!isNaN(timestamp) && timestamp > 0) {
+            dateObj = new Date(timestamp * 1000);
+        }
+
+        console.log(`[SYNC SUCCESS] User: ${userId} | Sub: ${subscription.id} | Date: ${dateObj}`);
+
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: {
+                stripeSubscriptionId: subscription.id,
+                stripeCustomerId: customerId, 
+                subscriptionStatus: prismaStatus,
+                currentPeriodEnd: dateObj
+            }
+        });
+
+        res.status(200).json({ message: 'Synced successfully', user: updatedUser });
+
+    } catch (error) {
+        console.error('Error syncing subscription:', error);
+        res.status(500).json({ error: 'Failed to sync subscription.' });
+    }
+};
+
+
+
+
+
+/**
+ * @description Adds a transaction record based on a Stripe Payment Intent ID.
+ * Useful for fixing missing transaction history.
+ */
+export const addStripePayment = async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const { stripePaymentId } = req.body;
+
+    if (!stripePaymentId) {
+        return res.status(400).json({ error: 'Stripe Payment ID (pi_...) is required.' });
+    }
+
+    try {
+        // 1. Check if transaction already exists to prevent duplicates
+        const existingTx = await prisma.transaction.findFirst({
+            where: { stripePaymentId }
+        });
+
+        if (existingTx) {
+            return res.status(409).json({ error: 'This payment ID is already recorded in the database.' });
+        }
+
+        // 2. Verify with Stripe
+        let paymentIntent: any;
+        try {
+            paymentIntent = await stripe.paymentIntents.retrieve(stripePaymentId);
+        } catch (err) {
+            console.error("Stripe Retrieve Error:", err);
+            return res.status(404).json({ error: 'Payment Intent ID not found in Stripe.' });
+        }
+
+        if (paymentIntent.status !== 'succeeded') {
+            return res.status(400).json({ error: `Payment status is ${paymentIntent.status}, not succeeded.` });
+        }
+
+        // 3. Create Transaction
+        // We handle invoice carefully: it might be a string ID, an object, or null.
+        let invoiceId = null;
+        if (typeof paymentIntent.invoice === 'string') {
+            invoiceId = paymentIntent.invoice;
+        } else if (paymentIntent.invoice && paymentIntent.invoice.id) {
+            invoiceId = paymentIntent.invoice.id;
+        }
+
+        const transaction = await prisma.transaction.create({
+            data: {
+                userId,
+                stripePaymentId: paymentIntent.id,
+                stripeInvoiceId: invoiceId,
+                amount: paymentIntent.amount / 100, // Stripe is in cents
+                currency: paymentIntent.currency,
+                status: 'succeeded',
+                createdAt: new Date(paymentIntent.created * 1000) // Ensure TS knows this is a timestamp
+            }
+        });
+
+        res.status(200).json({ message: 'Payment recorded successfully', transaction });
+
+    } catch (error) {
+        console.error('Error adding payment:', error);
+        res.status(500).json({ error: 'Failed to add payment.' });
+    }
+};

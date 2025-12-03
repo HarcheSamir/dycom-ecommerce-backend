@@ -56,6 +56,7 @@ export const webhookController = {
                     currency: paymentIntent.currency,
                     status: 'succeeded',
                     stripeInvoiceId: paymentIntent.id,
+                    stripePaymentId: paymentIntent.id,
                 },
              });
 
@@ -94,6 +95,7 @@ export const webhookController = {
               currency: paymentIntent.currency,
               status: 'succeeded',
               stripeInvoiceId: paymentIntent.id,
+              stripePaymentId: paymentIntent.id,
             },
           });
 
@@ -130,6 +132,10 @@ export const webhookController = {
           break;
         }
 
+        const paymentId = typeof invoice.payment_intent === 'string' 
+            ? invoice.payment_intent 
+            : (invoice.payment_intent as any)?.id;
+
         // Record Transaction
         await prisma.transaction.create({
           data: {
@@ -138,7 +144,8 @@ export const webhookController = {
             currency: invoice.currency,
             status: 'succeeded',
             stripeInvoiceId: invoice.id,
-            stripeSubscriptionId: invoice.subscription
+            stripeSubscriptionId: invoice.subscription,
+            stripePaymentId: paymentId,
           },
         });
 

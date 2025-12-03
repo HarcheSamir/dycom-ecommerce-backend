@@ -7,19 +7,22 @@ import 'dotenv/config';
 const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
-// Configuration
-const TEST_EMAIL = `make.brainers@gmail.com`;
+// --- CONFIGURATION START ---
+const randomId = Date.now(); 
+const TEST_EMAIL = `make.brainers+${randomId}@gmail.com`;
 const INSTALLMENTS_TARGET = 3;
-const DELAY_MS = 20000; // 20 Seconds wait between jumps
+const DELAY_MS = 15000; // 15 Seconds wait between jumps
+// --- CONFIGURATION END ---
 
 /**
  * Helper to wait for DB updates via polling
  */
-async function waitForInstallmentCount(userId: string, targetCount: number, timeoutMs = 90000) {
+async function waitForInstallmentCount(userId: string, targetCount: number, stripeCustomerId: string, timeoutMs = 90000) {
     const start = Date.now();
     process.stdout.write(`   Waiting for DB update (Target: ${targetCount}) `);
     
     while (Date.now() - start < timeoutMs) {
+        // 1. Check DB
         const user = await prisma.user.findUnique({ where: { id: userId } });
         
         if (user && user.installmentsPaid === targetCount) {
@@ -27,10 +30,21 @@ async function waitForInstallmentCount(userId: string, targetCount: number, time
             return user;
         }
         
-        // If we somehow overshot (rare but possible in race conditions)
         if (user && user.installmentsPaid > targetCount) {
             console.log(`\n   ⚠️  Overshot: Installments Paid = ${user.installmentsPaid}`);
             return user;
+        }
+
+        // 2. Debug Stripe Invoice State if taking too long (> 10s)
+        if (Date.now() - start > 10000 && (Date.now() - start) % 5000 < 2000) {
+            const invoices = await stripe.invoices.list({ customer: stripeCustomerId, limit: 1 });
+            if (invoices.data.length > 0) {
+                const latest = invoices.data[0];
+                // Only print if not paid yet
+                if (latest.status !== 'paid') {
+                    process.stdout.write(` [Stripe Invoice Status: ${latest.status}] `);
+                }
+            }
         }
 
         process.stdout.write('.');
@@ -46,7 +60,8 @@ async function waitForInstallmentCount(userId: string, targetCount: number, time
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 async function main() {
-    console.log('\n🧪 --- STARTING AUTOMATED TIME TRAVEL TEST (20s Intervals) --- 🧪');
+    console.log('\n🧪 --- STARTING AUTOMATED TIME TRAVEL TEST (Robust Version) --- 🧪');
+    console.log(`📧 Using generated email: ${TEST_EMAIL}`);
     console.log('⚠️  Make sure your BACKEND is running and STRIPE LISTEN is active!\n');
 
     try {
@@ -78,11 +93,24 @@ async function main() {
             email: TEST_EMAIL,
             name: 'Time Traveler',
             test_clock: clock.id,
-            payment_method: 'pm_card_visa', // Standard test card
-            invoice_settings: { default_payment_method: 'pm_card_visa' },
             metadata: { project: 'dycom' }
         });
         console.log(`   ✅ Customer Created: ${customer.id}`);
+
+        // 3b. ATTACH PAYMENT METHOD EXPLICITLY (Crucial for Recurring)
+        console.log('3b. Attaching Payment Method...');
+        const paymentMethod = await stripe.paymentMethods.attach('pm_card_visa', {
+            customer: customer.id,
+        });
+        
+        // Set as default for invoice settings
+        await stripe.customers.update(customer.id, {
+            invoice_settings: {
+                default_payment_method: paymentMethod.id,
+            },
+        });
+        console.log(`   ✅ Payment Method Attached & Set as Default: ${paymentMethod.id}`);
+
 
         // 4. Create Local DB User
         console.log('4. Creating Local DB User...');
@@ -109,25 +137,25 @@ async function main() {
                 userId: user.id,
                 type: 'MEMBERSHIP_TRANCHE',
                 installmentsRequired: INSTALLMENTS_TARGET.toString()
-            }
+            },
+            payment_behavior: 'allow_incomplete' // Allow creation even if payment pends (though it should succeed)
         });
         console.log(`   ✅ Subscription Active: ${sub.id}`);
 
         // Verify Payment 1
-        await waitForInstallmentCount(user.id, 1);
+        await waitForInstallmentCount(user.id, 1, customer.id);
 
         // --- DELAY 1 ---
         console.log(`\n⏳ Pausing for ${DELAY_MS/1000} seconds before Month 2...`);
         await sleep(DELAY_MS);
 
         // 6. Time Travel to Month 2
-        // We use 32 days to ensure we cover any month length (28, 30, 31) and pass the billing anchor
         console.log('🚀 6. TIME TRAVEL: Advancing clock by 32 days...');
         const month2 = now + (32 * 24 * 60 * 60);
         await stripe.testHelpers.testClocks.advance(clock.id, { frozen_time: month2 });
         
         // Verify Payment 2
-        await waitForInstallmentCount(user.id, 2);
+        await waitForInstallmentCount(user.id, 2, customer.id);
 
         // --- DELAY 2 ---
         console.log(`\n⏳ Pausing for ${DELAY_MS/1000} seconds before Month 3...`);
@@ -139,7 +167,7 @@ async function main() {
         await stripe.testHelpers.testClocks.advance(clock.id, { frozen_time: month3 });
 
         // Verify Payment 3 & Lifetime Upgrade
-        const finalUser = await waitForInstallmentCount(user.id, 3);
+        const finalUser = await waitForInstallmentCount(user.id, 3, customer.id);
 
         console.log('\n🏁 8. FINAL VERIFICATION');
         if (finalUser.subscriptionStatus === 'LIFETIME_ACCESS') {

@@ -9,8 +9,8 @@ const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 // Configuration
-const TEST_EMAIL = `kasdirawick@gmail.com`;
-
+const randomId = Date.now(); 
+const TEST_EMAIL = `test${randomId}@gmail.com`;
 /**
  * Helper to wait for DB status update via polling
  */

@@ -1,3 +1,5 @@
+//npx ts-node scripts/impersonate.ts harchesamir007@gmail.com
+
 import { PrismaClient } from '@prisma/client';
 import jwt from 'jsonwebtoken';
 import 'dotenv/config';

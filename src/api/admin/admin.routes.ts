@@ -6,7 +6,7 @@ import {
     createSection, addVideoToSection, updateCourse, deleteCourse,
     updateSection, deleteSection, updateVideo, deleteVideo, updateVideoOrder,
     getSettings, updateSettings,getMembershipPrices, updateMembershipPrices ,    updateSectionOrder,  getAdminUsers, grantLifetimeAccess ,
-    exportAdminUsers , getAdminUserDetails
+    exportAdminUsers , getAdminUserDetails,updateUserSubscription, syncStripeSubscription, addStripePayment
 
 } from './admin.controller';
 import { getAffiliateLeaderboard } from './affiliate.controller';
@@ -56,6 +56,10 @@ router.get('/financials/customers', getStripeCustomers);
 router.get('/users', getAdminUsers);
 router.get('/users/:userId/details', getAdminUserDetails); 
 router.put('/users/:userId/grant-lifetime', grantLifetimeAccess);
+
+router.put('/users/:userId/subscription', updateUserSubscription); // Manual edit
+router.post('/users/:userId/sync-subscription', syncStripeSubscription); // Sync from Stripe ID
+router.post('/users/:userId/sync-payment', addStripePayment); // Add Transaction from Stripe ID
 
 
 
