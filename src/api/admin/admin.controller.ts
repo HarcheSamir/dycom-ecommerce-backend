@@ -9,121 +9,121 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 // --- Dashboard Stats Controller ---
 export const getAdminDashboardStats = async (req: Request, res: Response) => {
-  try {
-    const [
-      activeSubscribers,
-      totalUsers,
-      totalRevenue,
-      totalVideos,
-      totalCourses,
-      totalInfluencers,
-      totalProducts,
-    ] = await prisma.$transaction([
-      prisma.transaction.count({ where: { status: 'succeeded' } }),
-      prisma.user.count(),
-      prisma.transaction.aggregate({ _sum: { amount: true }, where: { status: 'succeeded' } }),
-      prisma.video.count(),
-      prisma.videoCourse.count(),
-      prisma.contentCreator.count(),
-      prisma.winningProduct.count(),
-    ]);
+    try {
+        const [
+            activeSubscribers,
+            totalUsers,
+            totalRevenue,
+            totalVideos,
+            totalCourses,
+            totalInfluencers,
+            totalProducts,
+        ] = await prisma.$transaction([
+            prisma.transaction.count({ where: { status: 'succeeded' } }),
+            prisma.user.count(),
+            prisma.transaction.aggregate({ _sum: { amount: true }, where: { status: 'succeeded' } }),
+            prisma.video.count(),
+            prisma.videoCourse.count(),
+            prisma.contentCreator.count(),
+            prisma.winningProduct.count(),
+        ]);
 
-    const sixMonthsAgo = new Date();
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-    const monthlyRevenueData = await prisma.transaction.groupBy({
-      by: ['createdAt'],
-      where: { status: 'succeeded', createdAt: { gte: sixMonthsAgo } },
-      _sum: { amount: true },
-      orderBy: { createdAt: 'asc' }
-    });
-    
-    const monthlyRevenueChart = monthlyRevenueData.reduce((acc: { [key: string]: number }, item) => {
-        const month = new Date(item.createdAt).toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
-        if (!acc[month]) acc[month] = 0;
-        acc[month] += item._sum.amount || 0;
-        return acc;
-    }, {});
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const monthlyRevenueData = await prisma.transaction.groupBy({
+            by: ['createdAt'],
+            where: { status: 'succeeded', createdAt: { gte: sixMonthsAgo } },
+            _sum: { amount: true },
+            orderBy: { createdAt: 'asc' }
+        });
 
-    res.status(200).json({
-      activeSubscribers,
-      totalUsers,
-      monthlyRevenue: totalRevenue._sum.amount || 0,
-      totalVideos,
-      totalCourses,
-      totalInfluencers,
-      totalProducts,
-      monthlyRevenueChart,
-    });
-  } catch (error) {
-    console.error('Error fetching admin stats:', error);
-    res.status(500).json({ error: 'An internal server error occurred.' });
-  }
+        const monthlyRevenueChart = monthlyRevenueData.reduce((acc: { [key: string]: number }, item) => {
+            const month = new Date(item.createdAt).toLocaleString('fr-FR', { month: 'long', year: 'numeric' });
+            if (!acc[month]) acc[month] = 0;
+            acc[month] += item._sum.amount || 0;
+            return acc;
+        }, {});
+
+        res.status(200).json({
+            activeSubscribers,
+            totalUsers,
+            monthlyRevenue: totalRevenue._sum.amount || 0,
+            totalVideos,
+            totalCourses,
+            totalInfluencers,
+            totalProducts,
+            monthlyRevenueChart,
+        });
+    } catch (error) {
+        console.error('Error fetching admin stats:', error);
+        res.status(500).json({ error: 'An internal server error occurred.' });
+    }
 };
 
 // --- Course Management Controllers ---
 export const createCourse = async (req: Request, res: Response) => {
-  const { title, description, coverImageUrl, priceEur, priceUsd, priceAed, language } = req.body;
+    const { title, description, coverImageUrl, priceEur, priceUsd, priceAed, language } = req.body;
 
-  if (!title || !coverImageUrl) {
-    return res.status(400).json({ error: 'Title and coverImageUrl are required.' });
-  }
-
-  try {
-    let stripePriceIdEur = null;
-    let stripePriceIdUsd = null;
-    let stripePriceIdAed = null;
-
-    const product = await stripe.products.create({ name: title });
-
-    // Only create Stripe Price if amount is greater than 0
-    if (priceEur && Number(priceEur) > 0) {
-      const stripePrice = await stripe.prices.create({
-        product: product.id,
-        unit_amount: Math.round(Number(priceEur) * 100),
-        currency: 'eur',
-      });
-      stripePriceIdEur = stripePrice.id;
+    if (!title || !coverImageUrl) {
+        return res.status(400).json({ error: 'Title and coverImageUrl are required.' });
     }
 
-    if (priceUsd && Number(priceUsd) > 0) {
-      const stripePrice = await stripe.prices.create({
-        product: product.id,
-        unit_amount: Math.round(Number(priceUsd) * 100),
-        currency: 'usd',
-      });
-      stripePriceIdUsd = stripePrice.id;
-    }
+    try {
+        let stripePriceIdEur = null;
+        let stripePriceIdUsd = null;
+        let stripePriceIdAed = null;
 
-    if (priceAed && Number(priceAed) > 0) {
-      const stripePrice = await stripe.prices.create({
-        product: product.id,
-        unit_amount: Math.round(Number(priceAed) * 100),
-        currency: 'aed',
-      });
-      stripePriceIdAed = stripePrice.id;
-    }
+        const product = await stripe.products.create({ name: title });
 
-    const course = await prisma.videoCourse.create({
-      data: {
-        title,
-        description,
-        coverImageUrl,
-        // --- FIX START: Default to 0 instead of null if undefined/empty ---
-        priceEur: (priceEur !== undefined && priceEur !== null && priceEur !== '') ? Number(priceEur) : 0,
-        priceUsd: (priceUsd !== undefined && priceUsd !== null && priceUsd !== '') ? Number(priceUsd) : 0,
-        priceAed: (priceAed !== undefined && priceAed !== null && priceAed !== '') ? Number(priceAed) : 0,
-        // --- FIX END ---
-        stripePriceIdEur,
-        stripePriceIdUsd,
-        stripePriceIdAed,
-        language: language && Object.values(Language).includes(language) ? language : Language.EN
-      },
-    });
-    res.status(201).json(course);
-  } catch (error) {
-    console.error("Course creation failed:", error);
-    res.status(500).json({ error: 'Could not create course.' });
-  }
+        // Only create Stripe Price if amount is greater than 0
+        if (priceEur && Number(priceEur) > 0) {
+            const stripePrice = await stripe.prices.create({
+                product: product.id,
+                unit_amount: Math.round(Number(priceEur) * 100),
+                currency: 'eur',
+            });
+            stripePriceIdEur = stripePrice.id;
+        }
+
+        if (priceUsd && Number(priceUsd) > 0) {
+            const stripePrice = await stripe.prices.create({
+                product: product.id,
+                unit_amount: Math.round(Number(priceUsd) * 100),
+                currency: 'usd',
+            });
+            stripePriceIdUsd = stripePrice.id;
+        }
+
+        if (priceAed && Number(priceAed) > 0) {
+            const stripePrice = await stripe.prices.create({
+                product: product.id,
+                unit_amount: Math.round(Number(priceAed) * 100),
+                currency: 'aed',
+            });
+            stripePriceIdAed = stripePrice.id;
+        }
+
+        const course = await prisma.videoCourse.create({
+            data: {
+                title,
+                description,
+                coverImageUrl,
+                // --- FIX START: Default to 0 instead of null if undefined/empty ---
+                priceEur: (priceEur !== undefined && priceEur !== null && priceEur !== '') ? Number(priceEur) : 0,
+                priceUsd: (priceUsd !== undefined && priceUsd !== null && priceUsd !== '') ? Number(priceUsd) : 0,
+                priceAed: (priceAed !== undefined && priceAed !== null && priceAed !== '') ? Number(priceAed) : 0,
+                // --- FIX END ---
+                stripePriceIdEur,
+                stripePriceIdUsd,
+                stripePriceIdAed,
+                language: language && Object.values(Language).includes(language) ? language : Language.EN
+            },
+        });
+        res.status(201).json(course);
+    } catch (error) {
+        console.error("Course creation failed:", error);
+        res.status(500).json({ error: 'Could not create course.' });
+    }
 };
 
 
@@ -180,7 +180,7 @@ export const updateCourse = async (req: Request, res: Response) => {
             // If new price is provided and different from existing...
             // Note: We don't have the existing amount here easily without querying DB or passing it.
             // Simplified: If passed, we assume we want to update/set it.
-            
+
             if (newPriceVal === undefined) return currentDbPriceId; // No change requested
 
             // If existing price ID exists, archive it
@@ -272,49 +272,49 @@ export const getCourseDetails = async (req: Request, res: Response) => {
 };
 
 export const createSection = async (req: Request, res: Response) => {
-  const { courseId } = req.params;
-  const { title, order }: { title: string; order?: number } = req.body;
-  if (!title) return res.status(400).json({ error: 'Title is required.' });
-  try {
-    const section = await prisma.section.create({
-      data: { title, order: order || 0, courseId },
-    });
-    res.status(201).json(section);
-  } catch (error) {
-    res.status(500).json({ error: 'Could not create section.' });
-  }
+    const { courseId } = req.params;
+    const { title, order }: { title: string; order?: number } = req.body;
+    if (!title) return res.status(400).json({ error: 'Title is required.' });
+    try {
+        const section = await prisma.section.create({
+            data: { title, order: order || 0, courseId },
+        });
+        res.status(201).json(section);
+    } catch (error) {
+        res.status(500).json({ error: 'Could not create section.' });
+    }
 };
 
 
 export const addVideoToSection = async (req: Request, res: Response) => {
-  const { sectionId } = req.params;
-  // --- MODIFICATION START ---
-  // Read all fields from the request body and add types
-  const { title, vimeoId, duration, description, order }: { title: string; vimeoId: string; duration?: number; description?: string; order?: number } = req.body;
-  // --- MODIFICATION END ---
-  
-  if (!title || !vimeoId) {
-    return res.status(400).json({ error: 'Title and vimeoId are required.' });
-  }
-  try {
-    const video = await prisma.video.create({
-      data: {
-        title,
-        vimeoId,
-        // --- MODIFICATION START ---
-        // Use the values from the request, with fallbacks
-        duration: duration || 0,
-        description,
-        order: order || 0,
-        // --- MODIFICATION END ---
-        sectionId: sectionId
-      },
-    });
-    res.status(201).json(video);
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ error: 'Could not add video to section.' });
-  }
+    const { sectionId } = req.params;
+    // --- MODIFICATION START ---
+    // Read all fields from the request body and add types
+    const { title, vimeoId, duration, description, order }: { title: string; vimeoId: string; duration?: number; description?: string; order?: number } = req.body;
+    // --- MODIFICATION END ---
+
+    if (!title || !vimeoId) {
+        return res.status(400).json({ error: 'Title and vimeoId are required.' });
+    }
+    try {
+        const video = await prisma.video.create({
+            data: {
+                title,
+                vimeoId,
+                // --- MODIFICATION START ---
+                // Use the values from the request, with fallbacks
+                duration: duration || 0,
+                description,
+                order: order || 0,
+                // --- MODIFICATION END ---
+                sectionId: sectionId
+            },
+        });
+        res.status(201).json(video);
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ error: 'Could not add video to section.' });
+    }
 };
 
 
@@ -384,13 +384,13 @@ export const updateVideoOrder = async (req: Request, res: Response) => {
     }
 
     try {
-        const updatePromises = videos.map(video => 
+        const updatePromises = videos.map(video =>
             prisma.video.update({
                 where: { id: video.id },
                 data: { order: video.order },
             })
         );
-        
+
         await prisma.$transaction(updatePromises);
         res.status(200).json({ message: 'Video order updated successfully.' });
 
@@ -448,7 +448,7 @@ const getMembershipProductId = async (): Promise<string> => {
     // 1. Try to find via existing prices
     const prices = await stripe.prices.list({ active: true, limit: 100, expand: ['data.product'] });
     const membershipPrice = prices.data.find(p => p.metadata.type === 'membership_tier');
-    
+
     if (membershipPrice && typeof membershipPrice.product === 'object') {
         return membershipPrice.product.id;
     }
@@ -502,12 +502,12 @@ export const getMembershipPrices = async (req: Request, res: Response) => {
 };
 
 export const updateMembershipPrices = async (req: Request, res: Response) => {
-    const { pricingGrid } = req.body; 
+    const { pricingGrid } = req.body;
     // Expecting: { '1': { eur: 980, usd:... }, '2': { ... }, '3': { ... } }
 
     try {
         const productId = await getMembershipProductId();
-        
+
         // 1. Fetch ALL currently active membership prices to compare/archive
         const currentPrices = await stripe.prices.list({
             active: true,
@@ -521,14 +521,14 @@ export const updateMembershipPrices = async (req: Request, res: Response) => {
         for (const installments of ['1', '2', '3']) {
             // Loop through Currencies
             for (const currency of ['eur', 'usd', 'aed']) {
-                
+
                 const newAmount = Number(pricingGrid[installments][currency]);
                 if (newAmount <= 0) continue; // Skip invalid or zero prices
 
                 // Find if this specific combo already exists in Stripe
-                const existingPrice = currentPrices.data.find(p => 
-                    p.currency === currency && 
-                    p.metadata.installments === installments && 
+                const existingPrice = currentPrices.data.find(p =>
+                    p.currency === currency &&
+                    p.metadata.installments === installments &&
                     p.metadata.type === 'membership_tier'
                 );
 
@@ -536,7 +536,7 @@ export const updateMembershipPrices = async (req: Request, res: Response) => {
 
                 // Only talk to Stripe if the price CHANGED or DOESN'T EXIST
                 if (currentAmount !== newAmount) {
-                    
+
                     // A. Create NEW Price
                     const priceData: Stripe.PriceCreateParams = {
                         product: productId,
@@ -652,7 +652,7 @@ export const getAdminUsers = async (req: Request, res: Response) => {
                     installmentsPaid: true,
                     installmentsRequired: true,
                     createdAt: true,        // Account Creation Date
-                    currentPeriodEnd: true, 
+                    currentPeriodEnd: true,
                     stripeSubscriptionId: true,
                     stripeCustomerId: true,
                     referrer: {
@@ -687,7 +687,7 @@ export const getAdminUsers = async (req: Request, res: Response) => {
 
         const enrichedUsers = await Promise.all(users.map(async (user) => {
             const ltv = user.transactions.reduce((sum, tx) => sum + tx.amount, 0);
-            
+
             // Map transactions to a clean history array
             const paymentHistory = user.transactions.map(tx => ({
                 date: tx.createdAt,
@@ -704,7 +704,7 @@ export const getAdminUsers = async (req: Request, res: Response) => {
                     purchases: user._count.coursePurchases,
                     searches: user._count.searchHistory
                 },
-                transactions: undefined, 
+                transactions: undefined,
                 _count: undefined
             };
         }));
@@ -930,7 +930,7 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
             // Flatten videos in this course
             const courseVideoIds = course.sections.flatMap(s => s.videos.map(v => v.id));
             const totalVideos = courseVideoIds.length;
-            
+
             if (totalVideos === 0) return null;
 
             const completedCount = courseVideoIds.filter(vid => completedVideoIds.has(vid)).length;
@@ -1057,8 +1057,8 @@ export const syncStripeSubscription = async (req: Request, res: Response) => {
         });
 
         if (conflictingUser) {
-            return res.status(409).json({ 
-                error: `Conflict: This Stripe data is linked to ${conflictingUser.email}` 
+            return res.status(409).json({
+                error: `Conflict: This Stripe data is linked to ${conflictingUser.email}`
             });
         }
 
@@ -1096,7 +1096,7 @@ export const syncStripeSubscription = async (req: Request, res: Response) => {
             where: { id: userId },
             data: {
                 stripeSubscriptionId: subscription.id,
-                stripeCustomerId: customerId, 
+                stripeCustomerId: customerId,
                 subscriptionStatus: prismaStatus,
                 currentPeriodEnd: dateObj
             }
@@ -1175,5 +1175,104 @@ export const addStripePayment = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error adding payment:', error);
         res.status(500).json({ error: 'Failed to add payment.' });
+    }
+};
+
+
+
+
+
+
+
+/**
+ * @description Fetches users with PAST_DUE status and enriches with real-time Stripe invoice data.
+ */
+export const getPastDueUsers = async (req: Request, res: Response) => {
+    try {
+        // 1. Fetch users from DB
+        const users = await prisma.user.findMany({
+            where: { subscriptionStatus: 'PAST_DUE' },
+            select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                subscriptionStatus: true,
+                stripeSubscriptionId: true,
+                stripeCustomerId: true,
+                currentPeriodEnd: true
+            }
+        });
+
+        // 2. Enrich with Stripe Data (Parallel)
+        const enrichedUsers = await Promise.all(users.map(async (user) => {
+            let amountDue = 0;
+            let currency = 'usd';
+            let daysLate = 0;
+            let invoiceUrl = null;
+            // FIX 1: Declare variable here so it is available in the return scope
+            let failureReason: string | null = null;
+
+            if (user.stripeSubscriptionId) {
+                try {
+                    // Fetch subscription and expand the latest invoice to get the amount
+                    const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId, {
+                        expand: ['latest_invoice.payment_intent']
+                    });
+
+                    const invoice = subscription.latest_invoice as Stripe.Invoice;
+                    console.log(invoice)
+                    if (invoice) {
+                        amountDue = invoice.amount_due; // In cents
+                        currency = invoice.currency;
+                        invoiceUrl = invoice.hosted_invoice_url;
+
+                        // FIX 2: Cast to 'any' to safely access expanded property without TS errors
+                        // and assign to the outer 'failureReason' variable
+                        const paymentIntent = (invoice as any).payment_intent;
+                        
+                        if (paymentIntent && typeof paymentIntent === 'object') {
+                            const pi = paymentIntent as Stripe.PaymentIntent;
+                            if (pi.last_payment_error) {
+                                failureReason = pi.last_payment_error.message || pi.last_payment_error.code || 'Payment Failed';
+                            }
+                        }
+
+                        // Calculate days late
+                        const created = new Date(invoice.created * 1000);
+                        const now = new Date();
+                        const diffTime = Math.abs(now.getTime() - created.getTime());
+                        daysLate = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    }
+                } catch (e) {
+                    console.error(`[PAST DUE] Failed to fetch stripe details for user ${user.id}`, e);
+                }
+            } else if (user.currentPeriodEnd) {
+                // Fallback: If no stripe ID but DB has date
+                const now = new Date();
+                const diffTime = Math.abs(now.getTime() - user.currentPeriodEnd.getTime());
+                daysLate = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            }
+
+            return {
+                id: user.id,
+                email: user.email,
+                name: `${user.firstName} ${user.lastName}`,
+                phone: user.phone,
+                subscriptionStatus: user.subscriptionStatus,
+                daysLate,
+                amountDue: amountDue / 100, // Convert to units
+                currency,
+                invoiceUrl,
+                failureReason, // Now correctly defined
+                stripeCustomerId: user.stripeCustomerId
+            };
+        }));
+
+        res.status(200).json(enrichedUsers);
+    } catch (error) {
+        console.error('Error fetching past due users:', error);
+        res.status(500).json({ error: 'Failed to fetch past due users.' });
     }
 };
