@@ -10,7 +10,7 @@ import {
 
 } from './admin.controller';
 import { getAffiliateLeaderboard } from './affiliate.controller';
-import { getStripeFinancialStats, getStripeCustomers } from './stripe.controller';
+import { getCloserStats,getStripeFinancialStats, getStripeCustomers, getStripeTransactions,   assignCloserToTransaction } from './stripe.controller';
 
 const router = Router();
 
@@ -53,6 +53,9 @@ router.put('/settings', updateSettings);
 router.get('/financials/stats', getStripeFinancialStats);
 router.get('/financials/customers', getStripeCustomers);
 router.get('/financials/past-due', getPastDueUsers);
+router.get('/financials/transactions', getStripeTransactions);
+router.post('/financials/assign-closer', assignCloserToTransaction);
+router.get('/financials/closers', getCloserStats);
 
 router.get('/users', getAdminUsers);
 router.get('/users/:userId/details', getAdminUserDetails); 

@@ -2,7 +2,7 @@
 
 import { Request, Response } from 'express';
 import Stripe from 'stripe';
-
+import { prisma } from '../../index';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 /**
@@ -136,5 +136,291 @@ export const getStripeCustomers = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error fetching Stripe customers:', error);
         res.status(500).json({ error: 'Failed to fetch customers.' });
+    }
+};
+
+
+
+
+
+
+/**
+ * @description NEW: Get stats per closer (Count & Total Revenue) to populate the filter menu.
+ */
+export const getCloserStats = async (req: Request, res: Response) => {
+    try {
+        const stats = await prisma.transaction.groupBy({
+            by: ['closer'],
+            _count: { id: true },
+            _sum: { amount: true },
+            where: {
+                closer: { not: null },
+                status: 'succeeded'
+            },
+            orderBy: {
+                _sum: { amount: 'desc' }
+            }
+        });
+
+        const formatted = stats
+            .filter(s => s.closer !== '' && s.closer !== null)
+            .map(s => ({
+                name: s.closer,
+                count: s._count.id,
+                total: s._sum.amount || 0
+            }));
+
+        res.status(200).json(formatted);
+    } catch (error) {
+        console.error('Error fetching closer stats:', error);
+        res.status(500).json({ error: 'Failed to fetch closer stats.' });
+    }
+};
+
+/**
+ * @description Fetches raw Charges.
+ * Mode A: Filter by Closer (Local DB)
+ * Mode B: Search (Stripe Customer Search -> Stripe Charge Search)
+ * Mode C: List (Stripe Charge List)
+ */
+export const getStripeTransactions = async (req: Request, res: Response) => {
+    try {
+        const { limit = 20, starting_after, ending_before, search, closer } = req.query;
+
+        // --- MODE A: FILTER BY CLOSER (LOCAL DB SOURCE) ---
+        if (closer) {
+            const page = starting_after ? Number(starting_after) : 1;
+            const take = Number(limit);
+            const skip = (page - 1) * take;
+
+            const [localTx, total] = await prisma.$transaction([
+                prisma.transaction.findMany({
+                    where: { closer: String(closer), status: 'succeeded' },
+                    include: { user: true },
+                    orderBy: { createdAt: 'desc' },
+                    take,
+                    skip
+                }),
+                prisma.transaction.count({ where: { closer: String(closer), status: 'succeeded' } })
+            ]);
+
+            const formatted = localTx.map(tx => ({
+                id: tx.id, // Internal ID, technically not Stripe ID but works for UI
+                paymentId: tx.stripePaymentId,
+                amount: (tx.amount * 100), // Convert to cents for consistent formatting
+                currency: tx.currency,
+                status: tx.status,
+                created: Math.floor(new Date(tx.createdAt).getTime() / 1000),
+                customer: {
+                    id: tx.user.stripeCustomerId || 'local',
+                    email: tx.user.email,
+                    name: `${tx.user.firstName} ${tx.user.lastName}`
+                },
+                closer: tx.closer
+            }));
+
+            return res.status(200).json({
+                data: formatted,
+                has_more: skip + take < total,
+                first_id: null,
+                last_id: (page + 1).toString() // Hack: Use page numbers as "cursors" for local mode
+            });
+        }
+
+        // --- MODE B & C: STRIPE SOURCE ---
+        let chargesData: Stripe.Charge[] = [];
+        let hasMore = false;
+        let firstId = null;
+        let lastId = null;
+
+        if (search) {
+            // 1. Search Customers First (Stripe Limitation Fix)
+            const customers = await stripe.customers.search({
+                query: `email~"${search}" OR name~"${search}"`,
+                limit: 20
+            });
+
+            if (customers.data.length === 0) {
+                return res.status(200).json({ data: [], has_more: false, first_id: null, last_id: null });
+            }
+
+            // 2. Search Charges by Customer IDs using OR syntax
+            const query = customers.data.map(c => `customer:"${c.id}"`).join(' OR ');
+            
+            const searchResult = await stripe.charges.search({
+                query: query,
+                limit: Number(limit),
+                expand: ['data.customer', 'data.invoice'], 
+            });
+
+            chargesData = searchResult.data;
+            hasMore = searchResult.has_more;
+            // Search pagination uses tokens, disabling simple prev/next for search results
+            firstId = null;
+            lastId = null;
+
+        } else {
+            // Standard List
+            const params: Stripe.ChargeListParams = {
+                limit: Number(limit),
+                expand: ['data.customer', 'data.invoice'], 
+            };
+
+            if (starting_after) params.starting_after = starting_after as string;
+            if (ending_before) params.ending_before = ending_before as string;
+
+            const listResult = await stripe.charges.list(params);
+            
+            chargesData = listResult.data;
+            hasMore = listResult.has_more;
+            firstId = chargesData.length > 0 ? chargesData[0].id : null;
+            lastId = chargesData.length > 0 ? chargesData[chargesData.length - 1].id : null;
+        }
+
+        // --- MERGE LOGIC ---
+        
+        // 1. Extract IDs safely
+        const paymentIntentIds = chargesData
+            .map(c => {
+                const pi = (c as any).payment_intent;
+                return typeof pi === 'string' ? pi : pi?.id;
+            })
+            .filter(id => !!id) as string[];
+        
+        const invoiceIds = chargesData
+            .map(c => {
+                const inv = (c as any).invoice;
+                return typeof inv === 'object' && inv ? inv.id : (typeof inv === 'string' ? inv : null);
+            })
+            .filter(id => !!id) as string[];
+
+        // 2. Fetch Tags from DB
+        const localTransactions = await prisma.transaction.findMany({
+            where: {
+                OR: [
+                    { stripePaymentId: { in: paymentIntentIds } },
+                    { stripeInvoiceId: { in: invoiceIds } }
+                ]
+            },
+            select: { stripePaymentId: true, stripeInvoiceId: true, closer: true }
+        });
+
+        // 3. Map & Merge
+        const formattedTransactions = chargesData.map(charge => {
+            const rawCharge = charge as any; 
+            const paymentId = typeof rawCharge.payment_intent === 'string' ? rawCharge.payment_intent : rawCharge.payment_intent?.id;
+            const invoiceId = typeof rawCharge.invoice === 'object' && rawCharge.invoice ? rawCharge.invoice.id : (typeof rawCharge.invoice === 'string' ? rawCharge.invoice : null);
+
+            const localMatch = localTransactions.find(t => 
+                (paymentId && t.stripePaymentId === paymentId) || 
+                (invoiceId && t.stripeInvoiceId === invoiceId)
+            );
+
+            let customerData = { id: '', email: null as string | null, name: null as string | null };
+            
+            if (rawCharge.customer && typeof rawCharge.customer === 'object' && !rawCharge.customer.deleted) {
+                customerData = {
+                    id: rawCharge.customer.id,
+                    email: rawCharge.customer.email,
+                    name: rawCharge.customer.name
+                };
+            } else if (typeof rawCharge.customer === 'string') {
+                customerData.id = rawCharge.customer;
+            }
+
+            if (!customerData.email && rawCharge.receipt_email) {
+                customerData.email = rawCharge.receipt_email;
+            }
+
+            return {
+                id: charge.id, 
+                paymentId: paymentId, 
+                amount: charge.amount, 
+                currency: charge.currency,
+                status: charge.status,
+                created: charge.created,
+                customer: customerData,
+                closer: localMatch?.closer || '' 
+            };
+        });
+
+        res.status(200).json({
+            data: formattedTransactions,
+            has_more: hasMore,
+            first_id: firstId,
+            last_id: lastId
+        });
+
+    } catch (error) {
+        console.error('Error fetching Stripe transactions:', error);
+        res.status(500).json({ error: 'Failed to fetch transactions.' });
+    }
+};
+
+
+/**
+ * @description Assigns a Closer to a payment. Creates the transaction locally if it doesn't exist.
+ */
+export const assignCloserToTransaction = async (req: Request, res: Response) => {
+    const { 
+        paymentId, 
+        chargeId, 
+        amount, 
+        currency, 
+        created, 
+        customerId,
+        customerEmail,
+        closerName 
+    } = req.body;
+
+    const targetStripeId = paymentId || chargeId;
+
+    if (!targetStripeId) {
+        return res.status(400).json({ error: 'Transaction ID required' });
+    }
+
+    try {
+        const existingTx = await prisma.transaction.findFirst({
+            where: { stripePaymentId: targetStripeId }
+        });
+
+        if (existingTx) {
+            const updated = await prisma.transaction.update({
+                where: { id: existingTx.id },
+                data: { closer: closerName }
+            });
+            return res.status(200).json({ message: 'Closer updated', transaction: updated });
+        }
+
+        let user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { stripeCustomerId: customerId },
+                    { email: customerEmail }
+                ]
+            }
+        });
+
+        if (!user) {
+            return res.status(404).json({ error: 'Local user not found. Cannot tag payment yet.' });
+        }
+
+        const newTx = await prisma.transaction.create({
+            data: {
+                userId: user.id,
+                stripePaymentId: paymentId, 
+                amount: amount / 100, 
+                currency: currency,
+                status: 'succeeded',
+                createdAt: new Date(created * 1000),
+                closer: closerName 
+            }
+        });
+
+        return res.status(201).json({ message: 'Transaction synced and closer assigned', transaction: newTx });
+
+    } catch (error) {
+        console.error('Error assigning closer:', error);
+        res.status(500).json({ error: 'Failed to assign closer.' });
     }
 };

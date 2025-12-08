@@ -58,7 +58,7 @@ model Transaction {
   currentPeriodEnd     DateTime?
   cancelAtPeriodEnd    Boolean?  @default(false)
   user                 User      @relation(fields: [userId], references: [id])
-
+  closer               String?
   @@index([userId], map: "transactions_userId_fkey")
   @@map("transactions")
 }
