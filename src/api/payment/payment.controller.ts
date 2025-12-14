@@ -4,7 +4,7 @@ import { Response ,Request} from "express";
 import { PrismaClient } from "@prisma/client";
 import Stripe from "stripe";
 import { AuthenticatedRequest } from "../../utils/AuthRequestType";
-
+import { getProductPrice } from "./hotmart.service";
 const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -379,5 +379,18 @@ export const paymentController = {
       res.status(500).json({ error: error.message });
     }
   },
+async getHotmartPrice(req: Request, res: Response) {
+  try {
+    const priceData = await getProductPrice();
+
+    if (!priceData) {
+      return res.status(502).json({ error: 'Failed to fetch product price' });
+    }
+
+    return res.json(priceData);
+  } catch (error) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
 
 };

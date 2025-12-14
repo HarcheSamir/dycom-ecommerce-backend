@@ -14,6 +14,7 @@ router.post("/create-subscription", authMiddleware, paymentController.createSubs
 router.post("/create-course-payment-intent", authMiddleware, paymentController.createCoursePaymentIntent);
 router.post("/cancel-subscription", authMiddleware, paymentController.cancelSubscription);
 router.post("/reactivate-subscription", authMiddleware, paymentController.reactivateSubscription);
+router.get("/hotmart-price", paymentController.getHotmartPrice);
 
 router.post("/guest-checkout", paymentController.createGuestCheckoutSession);
 
