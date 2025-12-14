@@ -38,7 +38,7 @@ model User {
   referrals                User[]             @relation("Referrals")
   videoProgress            VideoProgress[]
   visitedProfiles          VisitedProfile[]
-
+  hotmartTransactionCode   String?            @unique
   @@index([referredById], map: "users_referredById_fkey")
   @@map("users")
 }
@@ -59,6 +59,7 @@ model Transaction {
   cancelAtPeriodEnd    Boolean?  @default(false)
   user                 User      @relation(fields: [userId], references: [id])
   closer               String?
+  hotmartTransactionCode String?
   @@index([userId], map: "transactions_userId_fkey")
   @@map("transactions")
 }
