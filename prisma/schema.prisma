@@ -39,6 +39,7 @@ model User {
   videoProgress            VideoProgress[]
   visitedProfiles          VisitedProfile[]
   hotmartTransactionCode   String?            @unique
+  tickets                  Ticket[]
   @@index([referredById], map: "users_referredById_fkey")
   @@map("users")
 }
@@ -301,4 +302,74 @@ enum Language {
   FR
   EN
   AR
+}
+
+
+// --- SUPPORT TICKET SYSTEM ---
+
+model Ticket {
+  id          String         @id @default(uuid())
+  subject     String         @db.Text
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  category    String         @default("GENERAL") // GENERAL, BILLING, TECHNICAL, PARTNERSHIP
+
+  // Authenticated User Link (Optional)
+  userId      String?
+  user        User?          @relation(fields: [userId], references: [id])
+
+  // Guest User Info (Used if userId is null)
+  guestName   String?
+  guestEmail  String?
+  
+  // Security for Guests (Magic Link Access)
+  accessToken String         @default(uuid()) @unique 
+
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  messages    TicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([accessToken])
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id         String     @id @default(uuid())
+  content    String     @db.Text
+  isInternal Boolean    @default(false) // If true, only Admins see this (Private Note)
+  
+  senderType SenderType @default(USER)
+  senderId   String?    // ID of the User/Admin. Null if Guest.
+
+  ticketId   String
+  ticket     Ticket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime   @default(now())
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum SenderType {
+  USER
+  ADMIN
+  GUEST
+  SYSTEM
 }

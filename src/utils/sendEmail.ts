@@ -165,3 +165,57 @@ export const sendPurchaseConfirmationEmail = async (
       return { success: false, error };
     }
   };
+
+
+export const sendTicketCreatedEmail = async (email: string, name: string, ticketId: string, accessToken: string, subject: string) => {
+
+  const ticketLink = `${FRONTEND_URL}/support/ticket/${ticketId}?key=${accessToken}`;
+
+  try {
+    await resend.emails.send({
+      from: 'Support <support@dycom-club.com>',
+      to: [email],
+      subject: `[Ticket #${ticketId.slice(0, 8)}] Received: ${subject}`,
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+          <h2>Ticket Received</h2>
+          <p>Hi ${name},</p>
+          <p>We have received your support request regarding "<strong>${subject}</strong>".</p>
+          <p>Our team will review it shortly. You can check the status or add more details by clicking the link below:</p>
+          <a href="${ticketLink}" style="background-color: #7F56D9; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">View Ticket</a>
+          <p style="margin-top: 20px; font-size: 12px; color: #666;">Ticket ID: ${ticketId}</p>
+        </div>
+      `
+    });
+  } catch (error) {
+    console.error('Failed to send Ticket Created Email:', error);
+  }
+};
+
+/**
+ * Sends a notification when an Admin replies to a ticket.
+ */
+export const sendTicketReplyEmail = async (email: string, name: string, ticketId: string, accessToken: string, previewMessage: string) => {
+  const ticketLink = `${FRONTEND_URL}/support/ticket/${ticketId}?key=${accessToken}`;
+
+  try {
+    await resend.emails.send({
+      from: 'Support <support@dycom-club.com>',
+      to: [email],
+      subject: `[Ticket #${ticketId.slice(0, 8)}] New Reply`,
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+          <h2>New Reply from Support</h2>
+          <p>Hi ${name},</p>
+          <p>A member of our team has replied to your ticket:</p>
+          <blockquote style="border-left: 4px solid #7F56D9; padding-left: 15px; background: #f9f9f9; padding: 10px;">
+            ${previewMessage.length > 200 ? previewMessage.substring(0, 200) + '...' : previewMessage}
+          </blockquote>
+          <a href="${ticketLink}" style="background-color: #7F56D9; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">Reply to Ticket</a>
+        </div>
+      `
+    });
+  } catch (error) {
+    console.error('Failed to send Ticket Reply Email:', error);
+  }
+};

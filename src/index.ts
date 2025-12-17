@@ -1,5 +1,5 @@
 // src/index.ts
-import 'dotenv/config'; // ADD THIS LINE FIRST
+import 'dotenv/config'; 
 
 import express, { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
@@ -16,9 +16,10 @@ import cron from 'node-cron'; // Import node-cron
 import { fetchHotProductsFromRapidAPI } from './api/product-discovery/product-discovery.service';
 import productDiscoveryRoutes from './api/product-discovery/product-discovery.routes';
 import dashboardRoutes from './api/dashboard/dashboard.routes';
-import adminRoutes from './api/admin/admin.routes'; // <-- IMPORT NEW ROUTES
+import adminRoutes from './api/admin/admin.routes';
 import { isAdminMiddleware } from './middleware/isAdmin.middleware';
 import affiliateRoutes from './api/affiliate/affiliate.routes';
+import supportRoutes from './api/support/support.routes';
 import { exec } from 'child_process';
 
 (BigInt.prototype as any).toJSON = function () {
@@ -96,6 +97,7 @@ app.use('/api/winning-products', authMiddleware, hasMembershipMiddleware,product
 app.use('/api/dashboard', authMiddleware, dashboardRoutes);
 app.use('/api/affiliate', authMiddleware, affiliateRoutes);
 app.use('/api/admin', authMiddleware, isAdminMiddleware, adminRoutes);
+app.use('/api/support', supportRoutes); 
 
 
 
