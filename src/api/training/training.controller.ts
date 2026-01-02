@@ -118,24 +118,6 @@ export const getAllCourses = async (req: AuthenticatedRequest, res: Response) =>
 
 
 
-export const markCourseAsSeen = async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { courseId } = req.params;
-    const userId = req.user!.userId;
-
-    await prisma.userSeenCourse.upsert({
-      where: { userId_courseId: { userId, courseId } },
-      update: {},
-      create: { userId, courseId }
-    });
-
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error("Mark course seen error", error);
-    res.status(500).json({ error: "Failed to mark course as seen" });
-  }
-};
-
 /**
  * @description Get Course Details. Grants access to Admins & Subscribers automatically.
  */
@@ -279,26 +261,6 @@ export const updateVideoProgress = async (req: AuthenticatedRequest, res: Respon
 };
 
 
-export const markSectionAsSeen = async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const { sectionId } = req.params;
-    const userId = req.user!.userId;
-
-    await prisma.userSeenSection.upsert({
-      where: { userId_sectionId: { userId, sectionId } },
-      update: {}, // Already exists, do nothing
-      create: { userId, sectionId }
-    });
-
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error("Mark section seen error", error);
-    res.status(500).json({ error: "Failed to mark section as seen" });
-  }
-};
-
-
-
 
 
 export const getLatestUpdates = async (req: AuthenticatedRequest, res: Response) => {
@@ -363,4 +325,49 @@ export const getLatestUpdates = async (req: AuthenticatedRequest, res: Response)
     console.error(error);
     res.status(500).json({ error: "Failed to fetch updates" });
   }
+};
+
+
+export const markSectionAsSeen = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { sectionId } = req.params;
+    const userId = req.user!.userId;
+
+    await prisma.userSeenSection.upsert({
+      where: { userId_sectionId: { userId, sectionId } },
+      update: {}, 
+      create: { userId, sectionId }
+    });
+
+    res.status(200).json({ success: true });
+  } catch (error: any) {
+    // FIX: If it fails because it already exists (P2002), that's fine. Treat as success.
+    if (error.code === 'P2002') {
+        return res.status(200).json({ success: true });
+    }
+    console.error("Mark section seen error", error);
+    res.status(500).json({ error: "Failed to mark section as seen" });
+  }
+};
+
+export const markCourseAsSeen = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { courseId } = req.params;
+        const userId = req.user!.userId;
+
+        await prisma.userSeenCourse.upsert({
+            where: { userId_courseId: { userId, courseId } },
+            update: {}, 
+            create: { userId, courseId }
+        });
+
+        res.status(200).json({ success: true });
+    } catch (error: any) {
+        // FIX: Handle race condition here too
+        if (error.code === 'P2002') {
+            return res.status(200).json({ success: true });
+        }
+        console.error("Mark course seen error", error);
+        res.status(500).json({ error: "Failed to mark course as seen" });
+    }
 };
