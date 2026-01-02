@@ -40,6 +40,8 @@ model User {
   visitedProfiles          VisitedProfile[]
   hotmartTransactionCode   String?            @unique
   tickets                  Ticket[]
+  seenSections             UserSeenSection[]  
+  seenCourses              UserSeenCourse[]
   @@index([referredById], map: "users_referredById_fkey")
   @@map("users")
 }
@@ -171,8 +173,23 @@ model VideoCourse {
   createdAt        DateTime         @default(now())
   purchasedBy      CoursePurchase[]
   sections         Section[]
+  seenBy      UserSeenCourse[] 
 
   @@map("video_courses")
+}
+
+model UserSeenCourse {
+  id        String      @id @default(uuid())
+  userId    String
+  courseId  String
+  seenAt    DateTime    @default(now())
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    VideoCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([courseId], map: "user_seen_courses_courseId_fkey")
+  @@map("user_seen_courses")
 }
 
 model CoursePurchase {
@@ -199,6 +216,7 @@ model Video {
   sectionId   String
   progress    VideoProgress[]
   section     Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
 
   @@index([sectionId], map: "videos_sectionId_fkey")
   @@map("videos")
@@ -211,9 +229,25 @@ model Section {
   courseId String
   course   VideoCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
   videos   Video[]
-
+  createdAt DateTime    @default(now())
+  seenBy    UserSeenSection[]
   @@index([courseId], map: "course_sections_courseId_fkey")
   @@map("course_sections")
+  
+}
+
+model UserSeenSection {
+  id        String   @id @default(uuid())
+  userId    String
+  sectionId String
+  seenAt    DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  section   Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sectionId])
+  @@index([sectionId], map: "user_seen_sections_sectionId_fkey")
+  @@map("user_seen_sections")
 }
 
 model VideoProgress {
