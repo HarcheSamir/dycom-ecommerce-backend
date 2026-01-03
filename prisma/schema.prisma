@@ -42,6 +42,8 @@ model User {
   tickets                  Ticket[]
   seenSections             UserSeenSection[]  
   seenCourses              UserSeenCourse[]
+  hasSeenWelcomeModal      Boolean            @default(false)
+
   @@index([referredById], map: "users_referredById_fkey")
   @@map("users")
 }

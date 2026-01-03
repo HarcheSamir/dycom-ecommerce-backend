@@ -32,6 +32,7 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
         installmentsRequired: true,   // <---
         coursePurchases: { select: { courseId: true } },
         availableCourseDiscounts: true,
+        hasSeenWelcomeModal: true,
         searchHistory: {
           orderBy: { createdAt: 'desc' },
           take: 10,
@@ -248,5 +249,22 @@ export const updateUserProfile = async (req: AuthenticatedRequest, res: Response
   } catch (error) {
     console.error('Error updating user profile:', error);
     return res.status(500).json({ error: 'An internal server error occurred.' });
+  }
+};
+
+
+export const markWelcomeAsSeen = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { hasSeenWelcomeModal: true }
+    });
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('Error marking welcome modal as seen:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
   }
 };
