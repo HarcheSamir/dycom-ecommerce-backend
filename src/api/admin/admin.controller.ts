@@ -129,7 +129,8 @@ export const createCourse = async (req: Request, res: Response) => {
 
 export const updateCourse = async (req: Request, res: Response) => {
     const { courseId } = req.params;
-    const { title, description, priceEur, priceUsd, priceAed, language } = req.body;
+    // Added coverImageUrl to destructuring
+    const { title, description, priceEur, priceUsd, priceAed, language, coverImageUrl } = req.body;
 
     try {
         const existingCourse = await prisma.videoCourse.findUnique({ where: { id: courseId } });
@@ -170,6 +171,11 @@ export const updateCourse = async (req: Request, res: Response) => {
         }
 
         const prismaData: any = { title, description, language };
+        
+        // Update cover image if provided
+        if (coverImageUrl) {
+            prismaData.coverImageUrl = coverImageUrl;
+        }
 
         // --- Helper to handle price updates ---
         const handlePriceUpdate = async (
@@ -177,10 +183,6 @@ export const updateCourse = async (req: Request, res: Response) => {
             currentDbPriceId: string | null,
             currency: 'eur' | 'usd' | 'aed'
         ): Promise<string | null> => {
-            // If new price is provided and different from existing...
-            // Note: We don't have the existing amount here easily without querying DB or passing it.
-            // Simplified: If passed, we assume we want to update/set it.
-
             if (newPriceVal === undefined) return currentDbPriceId; // No change requested
 
             // If existing price ID exists, archive it
@@ -205,7 +207,6 @@ export const updateCourse = async (req: Request, res: Response) => {
         };
 
         // 3. Process Price Updates
-        // We only update if the value is explicitly provided in the request
         if (priceEur !== undefined) {
             prismaData.priceEur = Number(priceEur) || 0;
             prismaData.stripePriceIdEur = await handlePriceUpdate(Number(priceEur), existingCourse.stripePriceIdEur, 'eur');
@@ -275,9 +276,21 @@ export const createSection = async (req: Request, res: Response) => {
     const { courseId } = req.params;
     const { title, order }: { title: string; order?: number } = req.body;
     if (!title) return res.status(400).json({ error: 'Title is required.' });
+    
     try {
+        // Find the current highest order for this course
+        let newOrder = order;
+        
+        if (newOrder === undefined) {
+            const lastSection = await prisma.section.findFirst({
+                where: { courseId },
+                orderBy: { order: 'desc' }
+            });
+            newOrder = (lastSection?.order ?? -1) + 1;
+        }
+
         const section = await prisma.section.create({
-            data: { title, order: order || 0, courseId },
+            data: { title, order: newOrder, courseId },
         });
         res.status(201).json(section);
     } catch (error) {
@@ -285,28 +298,33 @@ export const createSection = async (req: Request, res: Response) => {
     }
 };
 
-
 export const addVideoToSection = async (req: Request, res: Response) => {
     const { sectionId } = req.params;
-    // --- MODIFICATION START ---
-    // Read all fields from the request body and add types
     const { title, vimeoId, duration, description, order }: { title: string; vimeoId: string; duration?: number; description?: string; order?: number } = req.body;
-    // --- MODIFICATION END ---
 
     if (!title || !vimeoId) {
         return res.status(400).json({ error: 'Title and vimeoId are required.' });
     }
+    
     try {
+        // Find the current highest order for this section
+        let newOrder = order;
+        
+        if (newOrder === undefined) {
+            const lastVideo = await prisma.video.findFirst({
+                where: { sectionId },
+                orderBy: { order: 'desc' }
+            });
+            newOrder = (lastVideo?.order ?? -1) + 1;
+        }
+
         const video = await prisma.video.create({
             data: {
                 title,
                 vimeoId,
-                // --- MODIFICATION START ---
-                // Use the values from the request, with fallbacks
                 duration: duration || 0,
                 description,
-                order: order || 0,
-                // --- MODIFICATION END ---
+                order: newOrder,
                 sectionId: sectionId
             },
         });
