@@ -176,8 +176,14 @@ model VideoCourse {
   purchasedBy      CoursePurchase[]
   sections         Section[]
   seenBy      UserSeenCourse[] 
+  category    CourseCategory   @default(MAIN)
 
   @@map("video_courses")
+}
+
+enum CourseCategory {
+  MAIN
+  ARCHIVE
 }
 
 model UserSeenCourse {

@@ -9,9 +9,9 @@ export const getAllCourses = async (req: AuthenticatedRequest, res: Response) =>
     const { search, sortBy, language: languageFilter } = req.query as any;
     const uiLang = req.headers['accept-language']?.split(',')[0].split('-')[0] || 'fr';
 
-    const user = await prisma.user.findUnique({ 
-        where: { id: userId }, 
-        select: { createdAt: true } 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { createdAt: true }
     });
     if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -41,6 +41,7 @@ export const getAllCourses = async (req: AuthenticatedRequest, res: Response) =>
         coverImageUrl: true,
         order: true,
         language: true,
+        category: true,
         priceEur: true,
         priceUsd: true,
         priceAed: true,
@@ -77,14 +78,14 @@ export const getAllCourses = async (req: AuthenticatedRequest, res: Response) =>
         // Check internal new content (Bubble up logic)
         // 1. Is Section New?
         const isSectionNew = (new Date(section.createdAt) > new Date(user.createdAt)) && section.seenBy.length === 0;
-        
+
         // 2. Is any Video New?
         const hasNewVideo = section.videos.some(video => {
-            return (new Date(video.createdAt) > new Date(user.createdAt)) && video.progress.length === 0;
+          return (new Date(video.createdAt) > new Date(user.createdAt)) && video.progress.length === 0;
         });
 
         if (isSectionNew || hasNewVideo) {
-            hasInternalNewContent = true;
+          hasInternalNewContent = true;
         }
       });
 
@@ -94,10 +95,10 @@ export const getAllCourses = async (req: AuthenticatedRequest, res: Response) =>
       if (currency === 'eur') price = priceEur;
       else if (currency === 'aed') price = priceAed;
       else price = priceUsd;
-      
+
       const hasSeenCourse = course.seenBy.length > 0;
       const isNew = (new Date(course.createdAt) > new Date(user.createdAt)) && !hasSeenCourse;
-      
+
       return {
         ...rest,
         totalVideos,
@@ -274,7 +275,7 @@ export const getLatestUpdates = async (req: AuthenticatedRequest, res: Response)
       prisma.video.findMany({
         orderBy: { createdAt: 'desc' },
         take: 20,
-        where: { createdAt: { gt: user.createdAt } }, 
+        where: { createdAt: { gt: user.createdAt } },
         include: { section: { include: { course: true } } }
       }),
       prisma.section.findMany({
@@ -335,7 +336,7 @@ export const markSectionAsSeen = async (req: AuthenticatedRequest, res: Response
 
     await prisma.userSeenSection.upsert({
       where: { userId_sectionId: { userId, sectionId } },
-      update: {}, 
+      update: {},
       create: { userId, sectionId }
     });
 
@@ -343,7 +344,7 @@ export const markSectionAsSeen = async (req: AuthenticatedRequest, res: Response
   } catch (error: any) {
     // FIX: If it fails because it already exists (P2002), that's fine. Treat as success.
     if (error.code === 'P2002') {
-        return res.status(200).json({ success: true });
+      return res.status(200).json({ success: true });
     }
     console.error("Mark section seen error", error);
     res.status(500).json({ error: "Failed to mark section as seen" });
@@ -351,23 +352,23 @@ export const markSectionAsSeen = async (req: AuthenticatedRequest, res: Response
 };
 
 export const markCourseAsSeen = async (req: AuthenticatedRequest, res: Response) => {
-    try {
-        const { courseId } = req.params;
-        const userId = req.user!.userId;
+  try {
+    const { courseId } = req.params;
+    const userId = req.user!.userId;
 
-        await prisma.userSeenCourse.upsert({
-            where: { userId_courseId: { userId, courseId } },
-            update: {}, 
-            create: { userId, courseId }
-        });
+    await prisma.userSeenCourse.upsert({
+      where: { userId_courseId: { userId, courseId } },
+      update: {},
+      create: { userId, courseId }
+    });
 
-        res.status(200).json({ success: true });
-    } catch (error: any) {
-        // FIX: Handle race condition here too
-        if (error.code === 'P2002') {
-            return res.status(200).json({ success: true });
-        }
-        console.error("Mark course seen error", error);
-        res.status(500).json({ error: "Failed to mark course as seen" });
+    res.status(200).json({ success: true });
+  } catch (error: any) {
+    // FIX: Handle race condition here too
+    if (error.code === 'P2002') {
+      return res.status(200).json({ success: true });
     }
+    console.error("Mark course seen error", error);
+    res.status(500).json({ error: "Failed to mark course as seen" });
+  }
 };

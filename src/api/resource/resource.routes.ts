@@ -11,35 +11,35 @@ const router = Router();
 
 // Configure multer for memory storage (files go to Cloudinary)
 const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    // Allow common file types
-    const allowedMimes = [
-      'application/pdf',
-      'application/json',
-      'text/csv',
-      'text/plain',
-      'application/vnd.ms-excel',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'image/jpeg',
-      'image/png',
-      'image/gif',
-      'image/webp',
-      'application/zip',
-      'application/x-zip-compressed',
-    ];
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB limit
+    },
+    fileFilter: (req, file, cb) => {
+        // Allow common file types
+        const allowedMimes = [
+            'application/pdf',
+            'application/json',
+            'text/csv',
+            'text/plain',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'application/zip',
+            'application/x-zip-compressed',
+        ];
 
-    if (allowedMimes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error(`File type ${file.mimetype} is not allowed`));
-    }
-  },
+        if (allowedMimes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error(`File type ${file.mimetype} is not allowed`));
+        }
+    },
 });
 
 // --- ADMIN ROUTES (must come BEFORE /:id to prevent route conflicts) ---

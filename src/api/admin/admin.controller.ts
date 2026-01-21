@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { prisma } from '../../index';
 import Stripe from 'stripe';
 import { Language } from '@prisma/client';
-import { SubscriptionStatus } from '@prisma/client';
+import { SubscriptionStatus, CourseCategory } from '@prisma/client';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -62,7 +62,7 @@ export const getAdminDashboardStats = async (req: Request, res: Response) => {
 
 // --- Course Management Controllers ---
 export const createCourse = async (req: Request, res: Response) => {
-    const { title, description, coverImageUrl, priceEur, priceUsd, priceAed, language } = req.body;
+    const { title, description, coverImageUrl, priceEur, priceUsd, priceAed, language, category } = req.body;
 
     if (!title || !coverImageUrl) {
         return res.status(400).json({ error: 'Title and coverImageUrl are required.' });
@@ -116,7 +116,8 @@ export const createCourse = async (req: Request, res: Response) => {
                 stripePriceIdEur,
                 stripePriceIdUsd,
                 stripePriceIdAed,
-                language: language && Object.values(Language).includes(language) ? language : Language.EN
+                language: language && Object.values(Language).includes(language) ? language : Language.EN,
+                category: category && Object.values(CourseCategory).includes(category) ? category : CourseCategory.MAIN
             },
         });
         res.status(201).json(course);
@@ -130,7 +131,7 @@ export const createCourse = async (req: Request, res: Response) => {
 export const updateCourse = async (req: Request, res: Response) => {
     const { courseId } = req.params;
     // Added coverImageUrl to destructuring
-    const { title, description, priceEur, priceUsd, priceAed, language, coverImageUrl } = req.body;
+    const { title, description, priceEur, priceUsd, priceAed, language, coverImageUrl, category } = req.body;
 
     try {
         const existingCourse = await prisma.videoCourse.findUnique({ where: { id: courseId } });
@@ -171,10 +172,14 @@ export const updateCourse = async (req: Request, res: Response) => {
         }
 
         const prismaData: any = { title, description, language };
-        
+
         // Update cover image if provided
         if (coverImageUrl) {
             prismaData.coverImageUrl = coverImageUrl;
+        }
+
+        if (category && Object.values(CourseCategory).includes(category)) {
+            prismaData.category = category;
         }
 
         // --- Helper to handle price updates ---
@@ -276,11 +281,11 @@ export const createSection = async (req: Request, res: Response) => {
     const { courseId } = req.params;
     const { title, order }: { title: string; order?: number } = req.body;
     if (!title) return res.status(400).json({ error: 'Title is required.' });
-    
+
     try {
         // Find the current highest order for this course
         let newOrder = order;
-        
+
         if (newOrder === undefined) {
             const lastSection = await prisma.section.findFirst({
                 where: { courseId },
@@ -305,11 +310,11 @@ export const addVideoToSection = async (req: Request, res: Response) => {
     if (!title || !vimeoId) {
         return res.status(400).json({ error: 'Title and vimeoId are required.' });
     }
-    
+
     try {
         // Find the current highest order for this section
         let newOrder = order;
-        
+
         if (newOrder === undefined) {
             const lastVideo = await prisma.video.findFirst({
                 where: { sectionId },
@@ -1249,7 +1254,7 @@ export const getPastDueUsers = async (req: Request, res: Response) => {
                         // FIX 2: Cast to 'any' to safely access expanded property without TS errors
                         // and assign to the outer 'failureReason' variable
                         const paymentIntent = (invoice as any).payment_intent;
-                        
+
                         if (paymentIntent && typeof paymentIntent === 'object') {
                             const pi = paymentIntent as Stripe.PaymentIntent;
                             if (pi.last_payment_error) {
