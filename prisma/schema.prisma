@@ -409,3 +409,52 @@ enum SenderType {
   GUEST
   SYSTEM
 }
+
+// --- RESOURCES SYSTEM ---
+
+model ResourceCategory {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?    @db.Text
+  order       Int        @default(0)
+  icon        String?    // Icon name for UI (e.g., "FaFilePdf", "FaLink")
+  resources   Resource[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("resource_categories")
+}
+
+model Resource {
+  id          String            @id @default(uuid())
+  title       String
+  description String?           @db.Text
+  type        ResourceType      @default(FILE)
+  
+  // For FILE type: Cloudinary URL
+  fileUrl     String?           @db.Text
+  fileName    String?           // Original filename
+  fileSize    Int?              // Size in bytes
+  mimeType    String?           // e.g., "application/pdf"
+  cloudinaryId String?          // Cloudinary public_id for deletion
+  
+  // For URL type: External link
+  externalUrl String?           @db.Text
+  
+  categoryId  String
+  category    ResourceCategory  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  order       Int               @default(0)
+  isPublished Boolean           @default(true)
+  
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([categoryId])
+  @@map("resources")
+}
+
+enum ResourceType {
+  FILE    // PDF, CSV, JSON, images, etc.
+  URL     // External link
+}
