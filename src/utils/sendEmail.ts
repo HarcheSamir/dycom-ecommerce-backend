@@ -2,7 +2,7 @@
 import { Resend } from 'resend';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://dycom-club.com'; 
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://dycom-club.com';
 
 export const sendOtpEmail = async (email: string, otpCode: string) => {
   if (!process.env.RESEND_API_KEY) {
@@ -28,8 +28,8 @@ export const sendOtpEmail = async (email: string, otpCode: string) => {
 
     // FIX: Check for error in the response object
     if (response.error) {
-        console.error('Resend returned an error:', response.error);
-        return { success: false, error: response.error };
+      console.error('Resend returned an error:', response.error);
+      return { success: false, error: response.error };
     }
 
     // FIX: Access .id safely through response.data
@@ -62,8 +62,8 @@ export const sendPasswordResetEmail = async (email: string, token: string) => {
     });
 
     if (response.error) {
-        console.error('Resend Error:', response.error);
-        return { success: false, error: response.error };
+      console.error('Resend Error:', response.error);
+      return { success: false, error: response.error };
     }
     return { success: true, id: response.data?.id };
   } catch (error) {
@@ -81,24 +81,24 @@ export const sendPasswordResetEmail = async (email: string, token: string) => {
  * Sends a purchase confirmation email with training access and invoice link.
  */
 export const sendPurchaseConfirmationEmail = async (
-    email: string,
-    firstName: string,
-    itemName: string,
-    amount: number,
-    currency: string,
-    invoiceUrl: string | null
-  ) => {
-    const dashboardLink = `${FRONTEND_URL}/dashboard`;
-    // Fallback if currency is missing to avoid crashes
-    const safeCurrency = currency || 'USD';
-    const formattedAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency: safeCurrency.toUpperCase() }).format(amount);
-  
-    try {
-      const response = await resend.emails.send({
-        from: 'Dycom Club <noreply@dycom-club.com>',
-        to: [email],
-        subject: 'Payment Confirmation & Access',
-        html: `
+  email: string,
+  firstName: string,
+  itemName: string,
+  amount: number,
+  currency: string,
+  invoiceUrl: string | null
+) => {
+  const dashboardLink = `${FRONTEND_URL}/dashboard`;
+  // Fallback if currency is missing to avoid crashes
+  const safeCurrency = currency || 'USD';
+  const formattedAmount = new Intl.NumberFormat('en-US', { style: 'currency', currency: safeCurrency.toUpperCase() }).format(amount);
+
+  try {
+    const response = await resend.emails.send({
+      from: 'Dycom Club <noreply@dycom-club.com>',
+      to: [email],
+      subject: 'Payment Confirmation & Access',
+      html: `
           <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; background-color: #f9fafb;">
             <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
               
@@ -153,18 +153,18 @@ export const sendPurchaseConfirmationEmail = async (
             </div>
           </div>
         `
-      });
-  
-      if (response.error) {
-          console.error('Resend Error:', response.error);
-          return { success: false, error: response.error };
-      }
-      return { success: true, id: response.data?.id };
-    } catch (error) {
-      console.error('Resend Execution Error:', error);
-      return { success: false, error };
+    });
+
+    if (response.error) {
+      console.error('Resend Error:', response.error);
+      return { success: false, error: response.error };
     }
-  };
+    return { success: true, id: response.data?.id };
+  } catch (error) {
+    console.error('Resend Execution Error:', error);
+    return { success: false, error };
+  }
+};
 
 
 export const sendTicketCreatedEmail = async (email: string, name: string, ticketId: string, accessToken: string, subject: string) => {
@@ -217,5 +217,91 @@ export const sendTicketReplyEmail = async (email: string, name: string, ticketId
     });
   } catch (error) {
     console.error('Failed to send Ticket Reply Email:', error);
+  }
+};
+
+/**
+ * Sends a confirmation email for a Shop Order payment.
+ */
+export const sendShopOrderConfirmationEmail = async (
+  email: string,
+  firstName: string,
+  orderId: string,
+  tierName: string,
+  amount: number,
+  currency: string
+) => {
+  // Determine user link (usually just the dashboard or orders page)
+  const ordersLink = `${FRONTEND_URL}/dashboard/order-shop`;
+  const formattedAmount = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: currency.toUpperCase() }).format(amount);
+
+  try {
+    const response = await resend.emails.send({
+      from: 'Dycom Club <noreply@dycom-club.com>',
+      to: [email],
+      subject: 'Confirmation de votre commande de boutique',
+      html: `
+        <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; background-color: #f9fafb;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            
+            <!-- Header -->
+            <div style="background-color: #111317; padding: 30px; text-align: center;">
+               <h2 style="color: #ffffff; margin: 0;">Dycom Club</h2>
+            </div>
+
+            <!-- Body -->
+            <div style="padding: 30px;">
+              <h2 style="color: #111317; margin-top: 0;">Paiement reçu !</h2>
+              <p style="font-size: 16px; line-height: 1.5; color: #4b5563;">
+                Bonjour ${firstName},
+              </p>
+              <p style="font-size: 16px; line-height: 1.5; color: #4b5563;">
+                Nous avons bien reçu votre paiement pour la création de votre boutique. Notre équipe va commencer à travailler sur votre projet dès maintenant.
+              </p>
+
+              <!-- Order Summary -->
+              <div style="background-color: #f3f4f6; border-radius: 8px; padding: 20px; margin: 25px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr>
+                    <td style="padding: 5px 0; color: #6b7280; font-size: 14px;">Montant payé</td>
+                    <td style="padding: 5px 0; color: #111317; font-weight: bold; text-align: right;">${formattedAmount}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #6b7280; font-size: 14px;">Formule</td>
+                    <td style="padding: 5px 0; color: #111317; font-weight: bold; text-align: right;">${tierName}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 5px 0; color: #6b7280; font-size: 14px;">N° Commande</td>
+                    <td style="padding: 5px 0; color: #111317; font-weight: bold; text-align: right;">#${orderId.slice(0, 8)}</td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- CTA -->
+              <div style="text-align: center; margin-top: 30px; margin-bottom: 30px;">
+                <a href="${ordersLink}" style="background-color: #7F56D9; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
+                  Voir ma commande
+                </a>
+              </div>
+              
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
+              
+              <p style="font-size: 14px; color: #9ca3af; text-align: center;">
+                Si vous avez des questions, n'hésitez pas à répondre directement à cet email.
+              </p>
+            </div>
+          </div>
+        </div>
+      `
+    });
+
+    if (response.error) {
+      console.error('Resend Error:', response.error);
+      return { success: false, error: response.error };
+    }
+    return { success: true, id: response.data?.id };
+  } catch (error) {
+    console.error('Resend Execution Error:', error);
+    return { success: false, error };
   }
 };

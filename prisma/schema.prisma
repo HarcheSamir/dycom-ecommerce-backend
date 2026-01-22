@@ -43,6 +43,7 @@ model User {
   seenSections             UserSeenSection[]  
   seenCourses              UserSeenCourse[]
   hasSeenWelcomeModal      Boolean            @default(false)
+  shopOrders               ShopOrder[]
 
   @@index([referredById], map: "users_referredById_fkey")
   @@map("users")
@@ -371,6 +372,7 @@ model Ticket {
   updatedAt   DateTime       @updatedAt
 
   messages    TicketMessage[]
+  shopOrder   ShopOrder?
 
   @@index([userId])
   @@index([status])
@@ -463,4 +465,132 @@ model Resource {
 enum ResourceType {
   FILE    // PDF, CSV, JSON, images, etc.
   URL     // External link
+}
+
+// --- SHOP ORDER SYSTEM ---
+
+model ShopOrder {
+  id                  String            @id @default(uuid())
+  
+  // User who placed the order
+  userId              String
+  user                User              @relation(fields: [userId], references: [id])
+  
+  // Order Status
+  status              ShopOrderStatus   @default(DRAFT)
+  
+  // Step 1: Brand
+  brandName           String?
+  
+  // Step 2: Logo
+  hasOwnLogo          Boolean           @default(false)
+  logoUrl             String?           @db.Text
+  logoStyle           String?           // "minimalist", "modern", "luxury", etc.
+  
+  // Step 3: Product
+  productSource       ProductSource?    // OWN or TRENDING
+  ownProductInfo      Json?             // { name, url, price, description }
+  selectedProductId   String?           // If chose from trending products
+  productCount        Int               @default(1)
+  
+  // Step 4: Language
+  siteLanguages       Json?             // ["FR", "EN", "AR", "ES"]
+  isMultilingual      Boolean           @default(false)
+  
+  // Step 5: Style
+  selectedStyle       String?           // "modern", "minimal", "luxury", "playful", "professional"
+  colorPalette        Json?             // { primary: "#xxx", secondary: "#xxx", accent: "#xxx" }
+  
+  // Step 6: Personal Info
+  contactName         String?
+  contactEmail        String?
+  contactWhatsApp     String?
+  timezone            String?
+  
+  // Step 7: Upsells
+  wantsAdsVisuals     Boolean           @default(false)
+  wantsUGC            Boolean           @default(false)
+  wantsCopywriting    Boolean           @default(false)
+  wantsPremiumLogo    Boolean           @default(false)
+  
+  // Step 8: Notes
+  additionalNotes     String?           @db.Text
+  
+  // Pre-checkout requirements (client pastes these)
+  shopifyStoreUrl     String?
+  shopifyApiToken     String?           @db.Text
+  inspirationUrls     Json?             // ["url1", "url2", "url3"]
+  
+  // Pricing
+  pricingTier         PricingTier?      // TIER_1, TIER_2, QUOTE
+  totalPrice          Float?
+  
+  // Payment
+  paymentStatus       PaymentStatus     @default(PENDING)
+  hotmartTransactionCode String?        @unique
+  paidAt              DateTime?
+  
+  // Admin notes (for assignment filtering like payments)
+  adminNotes          String?           @db.Text
+  
+  // Linked ticket (created on submission)
+  ticketId            String?           @unique
+  ticket              Ticket?           @relation(fields: [ticketId], references: [id])
+  
+  // Files
+  files               ShopOrderFile[]
+  
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  submittedAt         DateTime?
+  completedAt         DateTime?
+  
+  @@index([userId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@map("shop_orders")
+}
+
+model ShopOrderFile {
+  id            String      @id @default(uuid())
+  orderId       String
+  order         ShopOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  fileName      String
+  fileUrl       String      @db.Text
+  fileType      String      // "logo", "asset", "reference", "other"
+  mimeType      String?
+  fileSize      Int?
+  cloudinaryId  String?
+  
+  createdAt     DateTime    @default(now())
+  
+  @@index([orderId])
+  @@map("shop_order_files")
+}
+
+enum ShopOrderStatus {
+  DRAFT           // In progress, not submitted
+  PENDING_PAYMENT // Submitted but awaiting payment confirmation
+  SUBMITTED       // Paid and submitted
+  IN_PROGRESS     // Admin working on it
+  COMPLETED       // Delivered
+  CANCELLED
+}
+
+enum ProductSource {
+  OWN       // User has their own product
+  TRENDING  // User selected from trending products
+}
+
+enum PricingTier {
+  TIER_1    // 1-3 products: 299€
+  TIER_2    // 4-10 products: 599€
+  QUOTE     // 10+ products: sur devis
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  REFUNDED
 }
