@@ -7,18 +7,27 @@ import path from 'path';
 const prisma = new PrismaClient();
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || ""; // You typically have this for the other AI feature
 // Use the same model as your product enrichment or 'gemini-1.5-flash' specifically
-const MODEL_NAME = "gemini-1.5-flash";
+const MODEL_NAME = "gemini-2.5-flash";
 
 const genAI = new GoogleGenAI({ apiKey: GOOGLE_API_KEY });
 
 export class AcademyAgentService {
 
+    constructor() {
+        console.log("AcademyAgentService Initialized");
+        console.log("API Key present:", !!GOOGLE_API_KEY);
+        console.log("Model Name:", MODEL_NAME);
+    }
+
     /**
      * Main function: Chat with Dylan
      */
     async chat(userMessage: string, userId: string): Promise<string> {
+        console.log(`[AcademyAgent] Chat request from ${userId}: "${userMessage}"`);
+
         // 1. Fetch Context (Cache this in production ideally, but DB is fast enough for now)
         const context = await this.buildFullContext();
+        console.log(`[AcademyAgent] Context built. Length: ${context.length} chars`);
 
         // 2. Build System Prompt
         const systemPrompt = `
