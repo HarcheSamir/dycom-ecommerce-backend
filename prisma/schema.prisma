@@ -220,6 +220,7 @@ model Video {
   title       String
   description String?         @db.Text
   vimeoId     String          @db.Text
+  transcript  String?         @db.LongText
   duration    Int?
   order       Int             @default(0)
   sectionId   String
