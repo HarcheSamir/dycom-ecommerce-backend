@@ -94,7 +94,8 @@ async function main() {
     // 3. Create Assistant
     console.log("🤖 Creating 'Dylan' Assistant...");
 
-    const assistant = await openai.assistants.create({
+    // DEBUG LOGS PROVED: assistants is still in beta, vectorStores is stable.
+    const assistant = await openai.beta.assistants.create({
         name: "Dylan - Academy Instructor",
         instructions: `You are Dylan, the expert e-commerce instructor. Answer based ONLY on the provided files.`,
         model: "gpt-4o-mini",
