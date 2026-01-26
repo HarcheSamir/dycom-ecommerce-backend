@@ -71,7 +71,7 @@ export const resourceController = {
         try {
             const { id } = req.params;
             const resource = await prisma.resource.findUnique({
-                where: { id, isPublished: true },
+                where: { id: id as string, isPublished: true },
                 include: { category: true },
             });
 
@@ -144,7 +144,7 @@ export const resourceController = {
             const { name, description, icon, order } = req.body;
 
             const category = await prisma.resourceCategory.update({
-                where: { id },
+                where: { id: id as string },
                 data: { name, description, icon, order },
             });
 
@@ -164,7 +164,7 @@ export const resourceController = {
 
             // Get all resources in this category to delete from Cloudinary
             const resources = await prisma.resource.findMany({
-                where: { categoryId: id, cloudinaryId: { not: null } },
+                where: { categoryId: id as string, cloudinaryId: { not: null } },
             });
 
             // Delete files from Cloudinary
@@ -179,7 +179,7 @@ export const resourceController = {
             }
 
             // Delete category (cascades to resources)
-            await prisma.resourceCategory.delete({ where: { id } });
+            await prisma.resourceCategory.delete({ where: { id: id as string } });
 
             res.json({ message: 'Category deleted successfully' });
         } catch (error: any) {
@@ -320,7 +320,7 @@ export const resourceController = {
             const { title, description, categoryId, externalUrl, isPublished, order } = req.body;
 
             const resource = await prisma.resource.update({
-                where: { id },
+                where: { id: id as string },
                 data: {
                     title,
                     description,
@@ -347,7 +347,7 @@ export const resourceController = {
             const { id } = req.params;
 
             // Get resource to delete from Cloudinary
-            const resource = await prisma.resource.findUnique({ where: { id } });
+            const resource = await prisma.resource.findUnique({ where: { id: id as string } });
 
             if (!resource) {
                 return res.status(404).json({ message: 'Resource not found' });
@@ -363,7 +363,7 @@ export const resourceController = {
             }
 
             // Delete from database
-            await prisma.resource.delete({ where: { id } });
+            await prisma.resource.delete({ where: { id: id as string } });
 
             res.json({ message: 'Resource deleted successfully' });
         } catch (error) {

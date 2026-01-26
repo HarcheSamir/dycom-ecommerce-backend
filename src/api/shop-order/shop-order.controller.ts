@@ -78,7 +78,7 @@ export const shopOrderController = {
             const { fileType } = req.body; // 'logo', 'asset', 'reference', 'other'
 
             // Verify order belongs to user
-            const order = await shopOrderService.getOrderById(orderId, userId);
+            const order = await shopOrderService.getOrderById(orderId as string, userId);
             if (!order) {
                 return res.status(404).json({ error: 'Order not found' });
             }
@@ -103,7 +103,7 @@ export const shopOrderController = {
             });
 
             // Save file record
-            const fileRecord = await shopOrderService.addFile(orderId, {
+            const fileRecord = await shopOrderService.addFile(orderId as string, {
                 fileName: req.file.originalname,
                 fileUrl: uploadResult.secure_url,
                 fileType: fileType || 'other',
@@ -114,7 +114,7 @@ export const shopOrderController = {
 
             // If it's a logo upload, update the order
             if (fileType === 'logo') {
-                await shopOrderService.saveDraft(userId, orderId, {
+                await shopOrderService.saveDraft(userId, orderId as string, {
                     hasOwnLogo: true,
                     logoUrl: uploadResult.secure_url
                 });
@@ -136,7 +136,7 @@ export const shopOrderController = {
             const { orderId, fileId } = req.params;
 
             // Verify order belongs to user
-            const order = await shopOrderService.getOrderById(orderId, userId);
+            const order = await shopOrderService.getOrderById(orderId as string, userId);
             if (!order) {
                 return res.status(404).json({ error: 'Order not found' });
             }
@@ -153,7 +153,7 @@ export const shopOrderController = {
             }
 
             // Delete from database
-            await shopOrderService.deleteFile(orderId, fileId);
+            await shopOrderService.deleteFile(orderId as string, fileId as string);
 
             return res.json({ success: true });
         } catch (error: any) {
@@ -170,7 +170,7 @@ export const shopOrderController = {
             const userId = req.user!.userId;
             const { orderId } = req.params;
 
-            const order = await shopOrderService.submitOrder(userId, orderId);
+            const order = await shopOrderService.submitOrder(userId, orderId as string);
             return res.json(order);
         } catch (error: any) {
             console.error('Error submitting order:', error);
@@ -200,7 +200,7 @@ export const shopOrderController = {
             const userId = req.user!.userId;
             const { orderId } = req.params;
 
-            const order = await shopOrderService.getOrderById(orderId, userId);
+            const order = await shopOrderService.getOrderById(orderId as string, userId);
             if (!order) {
                 return res.status(404).json({ error: 'Order not found' });
             }
@@ -257,7 +257,7 @@ export const shopOrderController = {
     async adminGetOrderDetails(req: AuthenticatedRequest, res: Response) {
         try {
             const { orderId } = req.params;
-            const order = await shopOrderService.getOrderById(orderId);
+            const order = await shopOrderService.getOrderById(orderId as string);
 
             if (!order) {
                 return res.status(404).json({ error: 'Order not found' });
@@ -282,7 +282,7 @@ export const shopOrderController = {
                 return res.status(400).json({ error: 'Status is required' });
             }
 
-            const order = await shopOrderService.adminUpdateStatus(orderId, status);
+            const order = await shopOrderService.adminUpdateStatus(orderId as string, status);
             return res.json(order);
         } catch (error: any) {
             console.error('Error updating status:', error);
@@ -298,7 +298,7 @@ export const shopOrderController = {
             const { orderId } = req.params;
             const { notes } = req.body;
 
-            const order = await shopOrderService.adminUpdateNotes(orderId, notes || '');
+            const order = await shopOrderService.adminUpdateNotes(orderId as string, notes || '');
             return res.json(order);
         } catch (error: any) {
             console.error('Error updating notes:', error);

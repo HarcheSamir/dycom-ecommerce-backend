@@ -134,7 +134,7 @@ export const updateCourse = async (req: Request, res: Response) => {
     const { title, description, priceEur, priceUsd, priceAed, language, coverImageUrl, category } = req.body;
 
     try {
-        const existingCourse = await prisma.videoCourse.findUnique({ where: { id: courseId } });
+        const existingCourse = await prisma.videoCourse.findUnique({ where: { id: courseId as string } });
         if (!existingCourse) {
             return res.status(404).json({ error: 'Course not found' });
         }
@@ -227,7 +227,7 @@ export const updateCourse = async (req: Request, res: Response) => {
 
         // 4. Update Database
         const updatedCourse = await prisma.videoCourse.update({
-            where: { id: courseId },
+            where: { id: courseId as string },
             data: prismaData,
         });
 
@@ -262,7 +262,7 @@ export const getCourseDetails = async (req: Request, res: Response) => {
     const { courseId } = req.params;
     try {
         const course = await prisma.videoCourse.findUnique({
-            where: { id: courseId },
+            where: { id: courseId as string },
             include: {
                 sections: {
                     orderBy: { order: 'asc' },
@@ -288,14 +288,14 @@ export const createSection = async (req: Request, res: Response) => {
 
         if (newOrder === undefined) {
             const lastSection = await prisma.section.findFirst({
-                where: { courseId },
+                where: { courseId: courseId as string },
                 orderBy: { order: 'desc' }
             });
             newOrder = (lastSection?.order ?? -1) + 1;
         }
 
         const section = await prisma.section.create({
-            data: { title, order: newOrder, courseId },
+            data: { title, order: newOrder, courseId: courseId as string },
         });
         res.status(201).json(section);
     } catch (error) {
@@ -317,7 +317,7 @@ export const addVideoToSection = async (req: Request, res: Response) => {
 
         if (newOrder === undefined) {
             const lastVideo = await prisma.video.findFirst({
-                where: { sectionId },
+                where: { sectionId: sectionId as string },
                 orderBy: { order: 'desc' }
             });
             newOrder = (lastVideo?.order ?? -1) + 1;
@@ -330,7 +330,7 @@ export const addVideoToSection = async (req: Request, res: Response) => {
                 duration: duration || 0,
                 description,
                 order: newOrder,
-                sectionId: sectionId
+                sectionId: sectionId as string
             },
         });
         res.status(201).json(video);
@@ -344,7 +344,7 @@ export const addVideoToSection = async (req: Request, res: Response) => {
 export const deleteCourse = async (req: Request, res: Response) => {
     const { courseId } = req.params;
     try {
-        await prisma.videoCourse.delete({ where: { id: courseId } });
+        await prisma.videoCourse.delete({ where: { id: courseId as string } });
         res.status(204).send(); // No Content
     } catch (error) {
         res.status(500).json({ error: 'Could not delete course.' });
@@ -356,7 +356,7 @@ export const updateSection = async (req: Request, res: Response) => {
     const { title, order }: { title: string; order?: number } = req.body;
     try {
         const updatedSection = await prisma.section.update({
-            where: { id: sectionId },
+            where: { id: sectionId as string },
             data: { title, order },
         });
         res.status(200).json(updatedSection);
@@ -368,7 +368,7 @@ export const updateSection = async (req: Request, res: Response) => {
 export const deleteSection = async (req: Request, res: Response) => {
     const { sectionId } = req.params;
     try {
-        await prisma.section.delete({ where: { id: sectionId } });
+        await prisma.section.delete({ where: { id: sectionId as string } });
         res.status(204).send();
     } catch (error) {
         res.status(500).json({ error: 'Could not delete section.' });
@@ -380,7 +380,7 @@ export const updateVideo = async (req: Request, res: Response) => {
     const { title, vimeoId, description, duration, order }: { title: string; vimeoId: string; description?: string; duration?: number; order?: number } = req.body;
     try {
         const updatedVideo = await prisma.video.update({
-            where: { id: videoId },
+            where: { id: videoId as string },
             data: { title, vimeoId, description, duration, order },
         });
         res.status(200).json(updatedVideo);
@@ -392,7 +392,7 @@ export const updateVideo = async (req: Request, res: Response) => {
 export const deleteVideo = async (req: Request, res: Response) => {
     const { videoId } = req.params;
     try {
-        await prisma.video.delete({ where: { id: videoId } });
+        await prisma.video.delete({ where: { id: videoId as string } });
         res.status(204).send();
     } catch (error) {
         res.status(500).json({ error: 'Could not delete video.' });
@@ -747,7 +747,7 @@ export const grantLifetimeAccess = async (req: Request, res: Response) => {
     const { userId } = req.params;
 
     try {
-        const user = await prisma.user.findUnique({ where: { id: userId } });
+        const user = await prisma.user.findUnique({ where: { id: userId as string } });
         if (!user) return res.status(404).json({ error: 'User not found.' });
 
         // 1. If they have an active Stripe Subscription, CANCEL IT immediately
@@ -763,7 +763,7 @@ export const grantLifetimeAccess = async (req: Request, res: Response) => {
 
         // 2. Update Database to Lifetime
         const updatedUser = await prisma.user.update({
-            where: { id: userId },
+            where: { id: userId as string },
             data: {
                 subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS,
                 installmentsPaid: 1,      // Visual override
@@ -924,7 +924,7 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
     try {
         // 1. Fetch User with basic relations
         const user = await prisma.user.findUnique({
-            where: { id: userId },
+            where: { id: userId as string },
             include: {
                 transactions: { orderBy: { createdAt: 'desc' } },
                 videoProgress: { where: { completed: true } }, // Only get completed videos
@@ -947,7 +947,7 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
         });
 
         // 3. Calculate Progress Per Course
-        const completedVideoIds = new Set(user.videoProgress.map(vp => vp.videoId));
+        const completedVideoIds = new Set(user.videoProgress.map((vp: any) => vp.videoId));
 
         const courseProgress = allCourses.map(course => {
             // Flatten videos in this course
@@ -988,13 +988,13 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
                 stripeSubscriptionId: user.stripeSubscriptionId,
             },
             financials: {
-                ltv: user.transactions.filter(t => t.status === 'succeeded').reduce((acc, curr) => acc + curr.amount, 0),
-                transactions: user.transactions,
+                ltv: user.transactions.filter((t: any) => t.status === 'succeeded').reduce((acc: number, curr: any) => acc + curr.amount, 0),
+                transactions: user.transactions as any,
             },
             courses: courseProgress,
             affiliate: {
-                referredBy: user.referrer ? `${user.referrer.firstName} ${user.referrer.lastName}` : null,
-                referralsCount: user.referrals.length
+                referredBy: user.referrer ? `${(user.referrer as any).firstName} ${(user.referrer as any).lastName}` : null,
+                referralsCount: (user as any).referrals ? (user as any).referrals.length : 0
             }
         };
 
@@ -1024,7 +1024,7 @@ export const updateUserSubscription = async (req: Request, res: Response) => {
 
     try {
         const updatedUser = await prisma.user.update({
-            where: { id: userId },
+            where: { id: userId as string },
             data: {
                 subscriptionStatus: subscriptionStatus as SubscriptionStatus,
                 installmentsPaid: Number(installmentsPaid),
@@ -1074,7 +1074,7 @@ export const syncStripeSubscription = async (req: Request, res: Response) => {
                     { stripeCustomerId: customerId },
                     { stripeSubscriptionId: subscription.id }
                 ],
-                NOT: { id: userId }
+                NOT: { id: userId as string }
             },
             select: { email: true }
         });
@@ -1116,7 +1116,7 @@ export const syncStripeSubscription = async (req: Request, res: Response) => {
         console.log(`[SYNC SUCCESS] User: ${userId} | Sub: ${subscription.id} | Date: ${dateObj}`);
 
         const updatedUser = await prisma.user.update({
-            where: { id: userId },
+            where: { id: userId as string },
             data: {
                 stripeSubscriptionId: subscription.id,
                 stripeCustomerId: customerId,
@@ -1183,7 +1183,7 @@ export const addStripePayment = async (req: Request, res: Response) => {
 
         const transaction = await prisma.transaction.create({
             data: {
-                userId,
+                userId: userId as string,
                 stripePaymentId: paymentIntent.id,
                 stripeInvoiceId: invoiceId,
                 amount: paymentIntent.amount / 100, // Stripe is in cents

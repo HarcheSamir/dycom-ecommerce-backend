@@ -130,7 +130,7 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
     // Fetch Course with Sections, Videos, and User Progress/Seen data
     const [course, user] = await Promise.all([
       prisma.videoCourse.findUnique({
-        where: { id: courseId },
+        where: { id: courseId as string },
         include: {
           sections: {
             orderBy: { order: 'asc' },
@@ -166,7 +166,7 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
           createdAt: true, // User join date
           subscriptionStatus: true,
           accountType: true,
-          coursePurchases: { where: { courseId: courseId } }
+          coursePurchases: { where: { courseId: courseId as string } }
         }
       })
     ]);
@@ -196,12 +196,12 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
 
     const enrichedCourse = {
       ...course,
-      sections: course.sections.map(section => {
+      sections: course.sections.map((section: any) => {
         const hasSeenSection = section.seenBy.length > 0;
         // A section is new if created after user joined AND user hasn't expanded it yet
         const isNewSection = (new Date(section.createdAt) > userJoinDate) && !hasSeenSection;
 
-        const enrichedVideos = section.videos.map(video => {
+        const enrichedVideos = section.videos.map((video: any) => {
           const hasStartedVideo = video.progress.length > 0;
           // A video is new if created after user joined AND user hasn't watched/started it
           const isNewVideo = (new Date(video.createdAt) > userJoinDate) && !hasStartedVideo;
@@ -244,7 +244,7 @@ export const updateVideoProgress = async (req: AuthenticatedRequest, res: Respon
     }
 
     const result = await prisma.videoProgress.upsert({
-      where: { userId_videoId: { userId, videoId } },
+      where: { userId_videoId: { userId, videoId: videoId as string } },
       update: updateData,
       create: {
         userId,
@@ -335,9 +335,9 @@ export const markSectionAsSeen = async (req: AuthenticatedRequest, res: Response
     const userId = req.user!.userId;
 
     await prisma.userSeenSection.upsert({
-      where: { userId_sectionId: { userId, sectionId } },
+      where: { userId_sectionId: { userId, sectionId: sectionId as string } },
       update: {},
-      create: { userId, sectionId }
+      create: { userId, sectionId: sectionId as string }
     });
 
     res.status(200).json({ success: true });
@@ -357,9 +357,9 @@ export const markCourseAsSeen = async (req: AuthenticatedRequest, res: Response)
     const userId = req.user!.userId;
 
     await prisma.userSeenCourse.upsert({
-      where: { userId_courseId: { userId, courseId } },
+      where: { userId_courseId: { userId, courseId: courseId as string } },
       update: {},
-      create: { userId, courseId }
+      create: { userId, courseId: courseId as string }
     });
 
     res.status(200).json({ success: true });

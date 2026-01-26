@@ -51,7 +51,7 @@ export const getTicketByAccessToken = async (req: Request, res: Response) => {
         const { key } = req.query; // Access Token passed as query param
 
         const ticket = await prisma.ticket.findUnique({
-            where: { id: ticketId },
+            where: { id: ticketId as string },
             include: {
                 messages: { orderBy: { createdAt: 'asc' } }
             }
@@ -73,7 +73,7 @@ export const replyViaAccessToken = async (req: Request, res: Response) => {
         const { ticketId } = req.params;
         const { key, message } = req.body;
 
-        const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
+        const ticket = await prisma.ticket.findUnique({ where: { id: ticketId as string } });
 
         if (!ticket || ticket.accessToken !== key) {
             return res.status(403).json({ error: 'Invalid Credentials.' });
@@ -81,7 +81,7 @@ export const replyViaAccessToken = async (req: Request, res: Response) => {
 
         const newMessage = await prisma.ticketMessage.create({
             data: {
-                ticketId,
+                ticketId: ticketId as string,
                 content: message,
                 senderType: ticket.userId ? SenderType.USER : SenderType.GUEST,
                 senderId: ticket.userId || null,
@@ -90,7 +90,7 @@ export const replyViaAccessToken = async (req: Request, res: Response) => {
 
         // Re-open ticket if it was closed
         if (ticket.status === 'CLOSED' || ticket.status === 'RESOLVED') {
-            await prisma.ticket.update({ where: { id: ticketId }, data: { status: 'OPEN' } });
+            await prisma.ticket.update({ where: { id: ticketId as string }, data: { status: 'OPEN' } });
         }
 
         res.status(201).json(newMessage);
@@ -108,11 +108,11 @@ export const getUserTickets = async (req: AuthenticatedRequest, res: Response) =
         const tickets = await prisma.ticket.findMany({
             where: { userId },
             orderBy: { updatedAt: 'desc' },
-            include: { 
-                messages: { 
-                    take: 1, 
+            include: {
+                messages: {
+                    take: 1,
                     orderBy: { createdAt: 'desc' } // Get last message snippet
-                } 
+                }
             }
         });
         res.status(200).json(tickets);
@@ -127,7 +127,7 @@ export const createUserTicket = async (req: AuthenticatedRequest, res: Response)
         const { subject, message, category } = req.body;
 
         const user = await prisma.user.findUnique({ where: { id: userId } });
-        if(!user) return res.status(404).json({error: "User not found"});
+        if (!user) return res.status(404).json({ error: "User not found" });
 
         const ticket = await prisma.ticket.create({
             data: {
@@ -158,7 +158,7 @@ export const createUserTicket = async (req: AuthenticatedRequest, res: Response)
 export const getAllTicketsAdmin = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const { status, page = 1, limit = 20 } = req.query;
-        
+
         const where: any = {};
         if (status && status !== 'ALL') {
             where.status = status;
@@ -200,7 +200,7 @@ export const adminReplyTicket = async (req: AuthenticatedRequest, res: Response)
         // 1. Save Message
         const ticketMsg = await prisma.ticketMessage.create({
             data: {
-                ticketId,
+                ticketId: ticketId as string,
                 content: message,
                 senderType: SenderType.ADMIN,
                 senderId: adminId,
@@ -211,9 +211,9 @@ export const adminReplyTicket = async (req: AuthenticatedRequest, res: Response)
         // 2. Update Ticket Status (optional)
         const updateData: any = { updatedAt: new Date() };
         if (newStatus) updateData.status = newStatus;
-        
+
         const ticket = await prisma.ticket.update({
-            where: { id: ticketId },
+            where: { id: ticketId as string },
             data: updateData
         });
 
@@ -221,7 +221,7 @@ export const adminReplyTicket = async (req: AuthenticatedRequest, res: Response)
         if (!isInternal) {
             const recipientEmail = ticket.guestEmail; // Always populated
             const recipientName = ticket.guestName || "Customer";
-            
+
             if (recipientEmail) {
                 await sendTicketReplyEmail(recipientEmail, recipientName, ticket.id, ticket.accessToken, message);
             }
@@ -238,7 +238,7 @@ export const adminGetTicketDetails = async (req: AuthenticatedRequest, res: Resp
     try {
         const { ticketId } = req.params;
         const ticket = await prisma.ticket.findUnique({
-            where: { id: ticketId },
+            where: { id: ticketId as string },
             include: {
                 messages: { orderBy: { createdAt: 'asc' } },
                 user: {
@@ -254,7 +254,7 @@ export const adminGetTicketDetails = async (req: AuthenticatedRequest, res: Resp
                 }
             }
         });
-        if(!ticket) return res.status(404).json({error: "Ticket not found"});
+        if (!ticket) return res.status(404).json({ error: "Ticket not found" });
         res.status(200).json(ticket);
     } catch (error) {
         res.status(500).json({ error: 'Error fetching details' });

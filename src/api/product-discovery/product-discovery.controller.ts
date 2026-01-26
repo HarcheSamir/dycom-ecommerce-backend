@@ -3,71 +3,71 @@
 import { Request, Response } from 'express';
 import { prisma } from '../../index';
 import { AuthenticatedRequest } from '../../utils/AuthRequestType';
-import trends from 'google-trends-api'; 
+import trends from 'google-trends-api';
 import { Prisma } from '@prisma/client';
 /**
  * @description Get a paginated, filterable, and sortable list of winning products.
  */
 export const getWinningProducts = async (req: Request, res: Response) => {
-  try {
-    const {
-      keyword,
-      category,
-      minPrice,
-      maxPrice,
-      sortBy = 'salesVolume',
-      page = 1,
-      limit = 20,
-    } = req.query;
+    try {
+        const {
+            keyword,
+            category,
+            minPrice,
+            maxPrice,
+            sortBy = 'salesVolume',
+            page = 1,
+            limit = 20,
+        } = req.query;
 
-    const pageNum = parseInt(page as string, 10);
-    const limitNum = parseInt(limit as string, 10);
-    const skip = (pageNum - 1) * limitNum;
+        const pageNum = parseInt(page as string, 10);
+        const limitNum = parseInt(limit as string, 10);
+        const skip = (pageNum - 1) * limitNum;
 
-    const where: any = {};
-    if (keyword) {
-      where.title = { contains: keyword as string };
+        const where: any = {};
+        if (keyword) {
+            where.title = { contains: keyword as string };
+        }
+        if (category) {
+            where.firstLevelCategoryName = category as string;
+        }
+        if (minPrice || maxPrice) {
+            where.price = {};
+            if (minPrice) where.price.gte = parseFloat(minPrice as string);
+            if (maxPrice) where.price.lte = parseFloat(maxPrice as string);
+        }
+
+        let orderBy: any = { salesVolume: 'desc' };
+        if (sortBy === 'price_asc') orderBy = { price: 'asc' };
+        if (sortBy === 'price_desc') orderBy = { price: 'desc' };
+        if (sortBy === 'newest') orderBy = { importedAt: 'desc' };
+
+        const [products, total] = await prisma.$transaction([
+            prisma.winningProduct.findMany({
+                where,
+                orderBy,
+                skip,
+                take: limitNum,
+            }),
+            prisma.winningProduct.count({ where }),
+        ]);
+
+        res.status(200).json({
+            data: products,
+            meta: {
+                total,
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(total / limitNum),
+            },
+        });
+    } catch (error) {
+        console.error('Error in getWinningProducts:', error);
+        res.status(500).json({
+            error: 'An internal server error occurred.',
+            message: (error as Error).message
+        });
     }
-    if (category) {
-      where.firstLevelCategoryName = category as string;
-    }
-    if (minPrice || maxPrice) {
-      where.price = {};
-      if (minPrice) where.price.gte = parseFloat(minPrice as string);
-      if (maxPrice) where.price.lte = parseFloat(maxPrice as string);
-    }
-
-    let orderBy: any = { salesVolume: 'desc' };
-    if (sortBy === 'price_asc') orderBy = { price: 'asc' };
-    if (sortBy === 'price_desc') orderBy = { price: 'desc' };
-    if (sortBy === 'newest') orderBy = { importedAt: 'desc' };
-
-    const [products, total] = await prisma.$transaction([
-      prisma.winningProduct.findMany({
-        where,
-        orderBy,
-        skip,
-        take: limitNum,
-      }),
-      prisma.winningProduct.count({ where }),
-    ]);
-
-    res.status(200).json({
-      data: products,
-      meta: {
-        total,
-        page: pageNum,
-        limit: limitNum,
-        totalPages: Math.ceil(total / limitNum),
-      },
-    });
-  } catch (error) {
-    console.error('Error in getWinningProducts:', error);
-    res.status(500).json({ 
-        error: 'An internal server error occurred.',
-        message: (error as Error).message 
-    });
-  }
 };
 
 /**
@@ -76,7 +76,7 @@ export const getWinningProducts = async (req: Request, res: Response) => {
 export const getSingleProduct = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const product = await prisma.winningProduct.findUnique({ where: { id } });
+        const product = await prisma.winningProduct.findUnique({ where: { id: id as string } });
         if (!product) {
             return res.status(404).json({ error: 'Product not found.' });
         }
@@ -96,7 +96,7 @@ export const favoriteProduct = async (req: AuthenticatedRequest, res: Response) 
         const userId = req.user!.userId;
 
         await prisma.userFavorite.create({
-            data: { userId, productId },
+            data: { userId, productId: productId as string },
         });
         res.status(201).json({ message: 'Product added to favorites.' });
     } catch (error) {
@@ -133,8 +133,8 @@ export const getCategories = async (req: Request, res: Response) => {
 export const getProductTrends = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const product = await prisma.winningProduct.findUnique({ where: { id } });
-        
+        const product = await prisma.winningProduct.findUnique({ where: { id: id as string } });
+
         if (!product) {
             return res.status(404).json({ error: 'Product not found.' });
         }
