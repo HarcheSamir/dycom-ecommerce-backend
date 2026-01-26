@@ -57,6 +57,9 @@ export class AcademyAgentService {
             }
 
             console.error("Run status:", run.status);
+            if (run.status === 'failed') {
+                console.error("Run Error Details:", JSON.stringify(run.last_error, null, 2));
+            }
             return "Désolé, Dylan réfléchit trop longtemps. Réessaie plus tard.";
 
         } catch (error) {
