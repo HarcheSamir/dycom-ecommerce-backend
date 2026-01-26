@@ -52,10 +52,7 @@ export class AcademyAgentService {
                 const lastMessage = messages.data[0];
 
                 if (lastMessage.role === "assistant" && lastMessage.content[0].type === "text") {
-                    let text = lastMessage.content[0].text.value;
-                    // Remove citations like 【4:17†source】
-                    text = text.replace(/【\d+:\d+†source】/g, '');
-                    return text;
+                    return lastMessage.content[0].text.value;
                 }
             }
 
