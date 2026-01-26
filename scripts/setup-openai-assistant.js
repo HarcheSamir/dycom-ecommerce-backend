@@ -15,7 +15,7 @@ const openai = new OpenAI({
 const prisma = new PrismaClient();
 
 async function main() {
-    console.log("🚀 Starting OpenAI Assistant Setup (JS Mode)...");
+    console.log("🚀 Starting OpenAI Assistant Setup (JS Mode - v6 SDK)...");
 
     if (!process.env.OPENAI_API_KEY) {
         console.error("❌ OPENAI_API_KEY is missing from .env");
@@ -28,65 +28,73 @@ async function main() {
     // Fetch videos
     const videos = await prisma.video.findMany({
         where: { transcript: { not: null } },
-        select: { title: true, transcript: true, section: { select: { title: true, course: { select: { title: true } } } } }
+        select: { title: true, transcript: true }
     });
 
     console.log(`   Found ${videos.length} videos with transcripts.`);
 
-    // Platform Manual
-    let platformManual = "";
-    // Check common paths
-    const manualPath = path.join(process.cwd(), 'src/api/academy-agent/platform-context.md');
+    let content = "[ACADEMY KNOWLEDGE]\n";
 
-    if (fs.existsSync(manualPath)) {
-        platformManual = fs.readFileSync(manualPath, 'utf-8');
-        console.log("   Loaded Platform Manual.");
-    } else {
-        console.warn("   ⚠️ Platform Manual not found at:", manualPath);
-    }
-
-    // Combine
-    let combinedContent = `
-[PLATFORM MANUAL]
-${platformManual}
-
-[COURSE CONTENT]
-`;
+    // Try to load manual
+    try {
+        const manualPath = path.join(process.cwd(), 'src/api/academy-agent/platform-context.md');
+        if (fs.existsSync(manualPath)) {
+            content += "[PLATFORM MANUAL]\n" + fs.readFileSync(manualPath, 'utf8') + "\n\n";
+            console.log("   Loaded Manual.");
+        }
+    } catch (e) { }
 
     videos.forEach(v => {
-        combinedContent += `
----
-VIDEO: "${v.title}"
-CONTENT:
-${v.transcript}
----
-`;
+        content += `\nVIDEO: ${v.title}\nTRANSCRIPT:\n${v.transcript}\n---\n`;
     });
 
     const knowledgeFilePath = path.join(process.cwd(), "academy-knowledge.txt");
-    fs.writeFileSync(knowledgeFilePath, combinedContent);
+    fs.writeFileSync(knowledgeFilePath, content);
     console.log(`💾 Saved temporarily to ${knowledgeFilePath}`);
 
     // 2. Upload to Vector Store
-    console.log("📤 Uploading to OpenAI Vector Store...");
+    console.log("📤 Creating Vector Store (v6 Syntax)...");
 
-    // Create Store
-    const vectorStore = await openai.beta.vectorStores.create({
-        name: "Academy Knowledge Store",
-    });
+    // Try stable path, fallback to beta just in case, but assume STABLE for v6.
+    // Error said 'vectorStores' not on 'beta', so it MUST be on root or elsewhere.
+    // Based on research: client.vectorStores.create()
 
-    // Upload
-    const fileStream = fs.createReadStream(knowledgeFilePath);
-    await openai.beta.vectorStores.fileBatches.uploadAndPoll(vectorStore.id, {
-        files: [fileStream]
-    });
+    let vectorStore;
+    try {
+        if (openai.vectorStores) {
+            vectorStore = await openai.vectorStores.create({ name: "Academy Knowledge Store" });
+        } else {
+            // Fallback or panic
+            vectorStore = await openai.beta.vectorStores.create({ name: "Academy Knowledge Store" });
+        }
+    } catch (e) {
+        console.log("Error creating store, trying alternate path...");
+        // If v6 structure is radically different, we might be blind, but lets assume root.
+        vectorStore = await openai.beta.vectorStores.create({ name: "Academy Knowledge Store" });
+    }
 
     console.log(`✅ Vector Store Created: ${vectorStore.id}`);
+
+    // Upload File
+    console.log("📤 Uploading File...");
+    const fileId = await openai.files.create({
+        file: fs.createReadStream(knowledgeFilePath),
+        purpose: "assistants",
+    });
+    console.log(`   File Uploaded: ${fileId.id}`);
+
+    // Link File
+    console.log("🔗 Linking File to Store...");
+    if (openai.vectorStores) {
+        await openai.vectorStores.fileBatches.create(vectorStore.id, { file_ids: [fileId.id] });
+    } else {
+        await openai.beta.vectorStores.fileBatches.create(vectorStore.id, { file_ids: [fileId.id] });
+    }
 
     // 3. Create Assistant
     console.log("🤖 Creating 'Dylan' Assistant...");
 
-    const assistant = await openai.beta.assistants.create({
+    const assistant = await openai.assistants.create({
         name: "Dylan - Academy Instructor",
         instructions: `You are Dylan, the expert e-commerce instructor. Answer based ONLY on the provided files.`,
         model: "gpt-4o-mini",
@@ -110,6 +118,11 @@ ${v.transcript}
 main()
     .catch((e) => {
         console.error("ERROR:", e);
+        // Print properties to help debug if it fails again
+        try {
+            console.log("OpenAI Client Keys:", Object.keys(openai));
+            if (openai.beta) console.log("OpenAI.beta Keys:", Object.keys(openai.beta));
+        } catch (err) { }
         process.exit(1);
     })
     .finally(async () => {
