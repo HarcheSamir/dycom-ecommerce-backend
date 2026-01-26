@@ -8,8 +8,8 @@ export const chatWithAgent = async (req: Request, res: Response) => {
     try {
         console.log("Received chat request");
         const { message } = req.body;
-        // User ID is attached by authMiddleware
-        const userId = (req as any).user?.id || "unknown";
+        // User ID is attached by authMiddleware (property is userId, not id)
+        const userId = (req as any).user?.userId || "unknown";
         console.log("User ID:", userId);
 
         if (!message) {
