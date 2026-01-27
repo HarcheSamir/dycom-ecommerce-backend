@@ -305,3 +305,76 @@ export const sendShopOrderConfirmationEmail = async (
     return { success: false, error };
   }
 };
+
+/**
+ * Sends an alert to Admins when a NEW ticket is created.
+ */
+export const sendNewTicketAlertToAdmins = async (
+  ticketId: string,
+  subject: string,
+  userEmail: string | null,
+  userName: string | null,
+  messagePreview: string
+) => {
+  const admins = ['Younesbbl87@outlook.fr'];
+  // Link to Admin Dashboard Ticket Detail
+  const adminTicketLink = `${FRONTEND_URL}/dashboard/admin/support?ticketId=${ticketId}`;
+
+  try {
+    await resend.emails.send({
+      from: 'Dycom Support Bot <noreply@dycom-club.com>',
+      to: admins,
+      subject: `[New Ticket] ${subject}`,
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #7F56D9;">New Support Ticket Created</h2>
+          <p><strong>User:</strong> ${userName || 'Guest'} (${userEmail || 'No Email'})</p>
+          <p><strong>Subject:</strong> ${subject}</p>
+          <p><strong>Message:</strong></p>
+          <blockquote style="border-left: 4px solid #ddd; padding-left: 15px; background: #f9f9f9; padding: 10px;">
+            ${messagePreview.length > 300 ? messagePreview.substring(0, 300) + '...' : messagePreview}
+          </blockquote>
+          <br />
+          <a href="${adminTicketLink}" style="background-color: #111317; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Open in Admin Panel</a>
+        </div>
+      `
+    });
+  } catch (error) {
+    console.error('Failed to send New Ticket Alert to Admins:', error);
+  }
+};
+
+/**
+ * Sends an alert to Admins when a USER replies to a ticket.
+ */
+export const sendTicketReplyAlertToAdmins = async (
+  ticketId: string,
+  userEmail: string | null,
+  userName: string | null,
+  messagePreview: string
+) => {
+  const admins = ['Younesbbl87@outlook.fr', 'harchesamir007@gmail.com'];
+  const adminTicketLink = `${FRONTEND_URL}/dashboard/admin/support?ticketId=${ticketId}`;
+
+  try {
+    await resend.emails.send({
+      from: 'Dycom Support Bot <noreply@dycom-club.com>',
+      to: admins,
+      subject: `[Ticket Reply] #${ticketId.slice(0, 8)} - New Message`,
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #007bff;">User Replied to Ticket</h2>
+          <p><strong>User:</strong> ${userName || 'Guest'} (${userEmail || 'No Email'})</p>
+          <p><strong>Message:</strong></p>
+          <blockquote style="border-left: 4px solid #007bff; padding-left: 15px; background: #f0f8ff; padding: 10px;">
+            ${messagePreview.length > 300 ? messagePreview.substring(0, 300) + '...' : messagePreview}
+          </blockquote>
+          <br />
+          <a href="${adminTicketLink}" style="background-color: #111317; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Conversation</a>
+        </div>
+      `
+    });
+  } catch (error) {
+    console.error('Failed to send Ticket Reply Alert to Admins:', error);
+  }
+};

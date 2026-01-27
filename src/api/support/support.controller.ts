@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { prisma } from '../../index';
 import { AuthenticatedRequest } from '../../utils/AuthRequestType';
-import { sendTicketCreatedEmail, sendTicketReplyEmail } from '../../utils/sendEmail';
+import { sendTicketCreatedEmail, sendTicketReplyEmail, sendNewTicketAlertToAdmins, sendTicketReplyAlertToAdmins } from '../../utils/sendEmail';
 import { SenderType, TicketStatus, TicketPriority } from '@prisma/client';
 
 // --- 1. PUBLIC / GUEST ACTIONS ---
@@ -34,9 +34,12 @@ export const createPublicTicket = async (req: Request, res: Response) => {
             }
         });
 
-        // Send Email
+        // Send Email to Guest
         const userName = existingUser ? existingUser.firstName : (name || 'Guest');
         await sendTicketCreatedEmail(email, userName, ticket.id, ticket.accessToken, subject);
+
+        // ALERT ADMINS
+        await sendNewTicketAlertToAdmins(ticket.id, subject, email, userName, message);
 
         res.status(201).json({ message: 'Ticket created', ticketId: ticket.id, accessToken: ticket.accessToken });
     } catch (error) {
@@ -93,6 +96,14 @@ export const replyViaAccessToken = async (req: Request, res: Response) => {
             await prisma.ticket.update({ where: { id: ticketId as string }, data: { status: 'OPEN' } });
         }
 
+        // ALERT ADMINS (Guest/User replied via magic link)
+        await sendTicketReplyAlertToAdmins(
+            ticket.id,
+            ticket.guestEmail,
+            ticket.guestName,
+            message
+        );
+
         res.status(201).json(newMessage);
     } catch (error) {
         console.error('Error replying to ticket:', error);
@@ -147,6 +158,9 @@ export const createUserTicket = async (req: AuthenticatedRequest, res: Response)
         });
 
         await sendTicketCreatedEmail(user.email, user.firstName, ticket.id, ticket.accessToken, subject);
+
+        // ALERT ADMINS
+        await sendNewTicketAlertToAdmins(ticket.id, subject, user.email, `${user.firstName} ${user.lastName}`, message);
         res.status(201).json(ticket);
     } catch (error) {
         res.status(500).json({ error: 'Failed to create ticket' });
