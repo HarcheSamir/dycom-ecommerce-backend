@@ -3,12 +3,60 @@ import { prisma } from '../../index';
 import { AuthenticatedRequest } from '../../utils/AuthRequestType';
 import { sendTicketCreatedEmail, sendTicketReplyEmail, sendNewTicketAlertToAdmins, sendTicketReplyAlertToAdmins } from '../../utils/sendEmail';
 import { SenderType, TicketStatus, TicketPriority } from '@prisma/client';
+import { v2 as cloudinary } from 'cloudinary';
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Helper to upload buffer to Cloudinary
+const uploadToCloudinary = (buffer: Buffer, options: any): Promise<any> => {
+    return new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(options, (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+        });
+        uploadStream.end(buffer);
+    });
+};
+
+// Helper to create attachments for a message
+const createAttachmentsFromFiles = async (messageId: string, files: Express.Multer.File[], ticketId: string): Promise<void> => {
+    if (!files || files.length === 0) return;
+
+    for (const file of files) {
+        try {
+            const uploadResult = await uploadToCloudinary(file.buffer, {
+                folder: `support-tickets/${ticketId}`,
+                resource_type: 'auto'
+            });
+
+            await prisma.ticketAttachment.create({
+                data: {
+                    messageId,
+                    fileName: file.originalname,
+                    fileUrl: uploadResult.secure_url,
+                    fileSize: file.size,
+                    mimeType: file.mimetype,
+                    cloudinaryId: uploadResult.public_id
+                }
+            });
+        } catch (error) {
+            console.error('Failed to upload attachment:', error);
+            // Continue with other files even if one fails
+        }
+    }
+};
 
 // --- 1. PUBLIC / GUEST ACTIONS ---
 
 export const createPublicTicket = async (req: Request, res: Response) => {
     try {
         const { name, email, subject, message, category } = req.body;
+        const files = req.files as Express.Multer.File[] | undefined;
 
         if (!email || !subject || !message) {
             return res.status(400).json({ error: 'Email, Subject, and Message are required.' });
@@ -31,8 +79,16 @@ export const createPublicTicket = async (req: Request, res: Response) => {
                         senderId: existingUser ? existingUser.id : null
                     }
                 }
+            },
+            include: {
+                messages: true
             }
         });
+
+        // Upload attachments if any
+        if (files && files.length > 0 && ticket.messages[0]) {
+            await createAttachmentsFromFiles(ticket.messages[0].id, files, ticket.id);
+        }
 
         // Send Email to Guest
         const userName = existingUser ? existingUser.firstName : (name || 'Guest');
@@ -56,7 +112,12 @@ export const getTicketByAccessToken = async (req: Request, res: Response) => {
         const ticket = await prisma.ticket.findUnique({
             where: { id: ticketId as string },
             include: {
-                messages: { orderBy: { createdAt: 'asc' } }
+                messages: {
+                    orderBy: { createdAt: 'asc' },
+                    include: {
+                        attachments: true
+                    }
+                }
             }
         });
 
@@ -75,6 +136,7 @@ export const replyViaAccessToken = async (req: Request, res: Response) => {
     try {
         const { ticketId } = req.params;
         const { key, message } = req.body;
+        const files = req.files as Express.Multer.File[] | undefined;
 
         const ticket = await prisma.ticket.findUnique({ where: { id: ticketId as string } });
 
@@ -91,6 +153,11 @@ export const replyViaAccessToken = async (req: Request, res: Response) => {
             }
         });
 
+        // Upload attachments if any
+        if (files && files.length > 0) {
+            await createAttachmentsFromFiles(newMessage.id, files, ticketId as string);
+        }
+
         // Re-open ticket if it was closed
         if (ticket.status === 'CLOSED' || ticket.status === 'RESOLVED') {
             await prisma.ticket.update({ where: { id: ticketId as string }, data: { status: 'OPEN' } });
@@ -104,7 +171,13 @@ export const replyViaAccessToken = async (req: Request, res: Response) => {
             message
         );
 
-        res.status(201).json(newMessage);
+        // Fetch message with attachments for response
+        const messageWithAttachments = await prisma.ticketMessage.findUnique({
+            where: { id: newMessage.id },
+            include: { attachments: true }
+        });
+
+        res.status(201).json(messageWithAttachments);
     } catch (error) {
         console.error('Error replying to ticket:', error);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -136,6 +209,7 @@ export const createUserTicket = async (req: AuthenticatedRequest, res: Response)
     try {
         const userId = req.user!.userId;
         const { subject, message, category } = req.body;
+        const files = req.files as Express.Multer.File[] | undefined;
 
         const user = await prisma.user.findUnique({ where: { id: userId } });
         if (!user) return res.status(404).json({ error: "User not found" });
@@ -154,8 +228,16 @@ export const createUserTicket = async (req: AuthenticatedRequest, res: Response)
                         senderId: userId
                     }
                 }
+            },
+            include: {
+                messages: true
             }
         });
+
+        // Upload attachments if any
+        if (files && files.length > 0 && ticket.messages[0]) {
+            await createAttachmentsFromFiles(ticket.messages[0].id, files, ticket.id);
+        }
 
         await sendTicketCreatedEmail(user.email, user.firstName, ticket.id, ticket.accessToken, subject);
 
@@ -208,8 +290,12 @@ export const getAllTicketsAdmin = async (req: AuthenticatedRequest, res: Respons
 export const adminReplyTicket = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const { ticketId } = req.params;
-        const { message, newStatus, isInternal } = req.body; // isInternal = Private Note
+        const { message, newStatus, isInternal: isInternalRaw } = req.body; // isInternal = Private Note
         const adminId = req.user!.userId;
+        const files = req.files as Express.Multer.File[] | undefined;
+
+        // Parse isInternal from FormData string
+        const isInternal = isInternalRaw === true || isInternalRaw === 'true';
 
         // 1. Save Message
         const ticketMsg = await prisma.ticketMessage.create({
@@ -218,11 +304,16 @@ export const adminReplyTicket = async (req: AuthenticatedRequest, res: Response)
                 content: message,
                 senderType: SenderType.ADMIN,
                 senderId: adminId,
-                isInternal: isInternal || false
+                isInternal
             }
         });
 
-        // 2. Update Ticket Status (optional)
+        // 2. Upload attachments if any (only for non-internal messages)
+        if (files && files.length > 0 && !isInternal) {
+            await createAttachmentsFromFiles(ticketMsg.id, files, ticketId as string);
+        }
+
+        // 3. Update Ticket Status (optional)
         const updateData: any = { updatedAt: new Date() };
         if (newStatus) updateData.status = newStatus;
 
@@ -231,7 +322,7 @@ export const adminReplyTicket = async (req: AuthenticatedRequest, res: Response)
             data: updateData
         });
 
-        // 3. Send Email Notification (ONLY if not internal note)
+        // 4. Send Email Notification (ONLY if not internal note)
         if (!isInternal) {
             const recipientEmail = ticket.guestEmail; // Always populated
             const recipientName = ticket.guestName || "Customer";
@@ -241,7 +332,13 @@ export const adminReplyTicket = async (req: AuthenticatedRequest, res: Response)
             }
         }
 
-        res.status(200).json(ticketMsg);
+        // Fetch message with attachments for response
+        const messageWithAttachments = await prisma.ticketMessage.findUnique({
+            where: { id: ticketMsg.id },
+            include: { attachments: true }
+        });
+
+        res.status(200).json(messageWithAttachments);
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Failed to reply' });
@@ -254,7 +351,12 @@ export const adminGetTicketDetails = async (req: AuthenticatedRequest, res: Resp
         const ticket = await prisma.ticket.findUnique({
             where: { id: ticketId as string },
             include: {
-                messages: { orderBy: { createdAt: 'asc' } },
+                messages: {
+                    orderBy: { createdAt: 'asc' },
+                    include: {
+                        attachments: true
+                    }
+                },
                 user: {
                     select: {
                         id: true,

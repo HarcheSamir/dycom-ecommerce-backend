@@ -392,10 +392,29 @@ model TicketMessage {
   ticketId   String
   ticket     Ticket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
+  attachments TicketAttachment[]
+
   createdAt  DateTime   @default(now())
 
   @@index([ticketId])
   @@map("ticket_messages")
+}
+
+model TicketAttachment {
+  id            String        @id @default(uuid())
+  messageId     String
+  message       TicketMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  
+  fileName      String        // Original filename
+  fileUrl       String        @db.Text  // Cloudinary URL
+  fileSize      Int?          // Size in bytes
+  mimeType      String?       // e.g., "image/png", "application/pdf"
+  cloudinaryId  String?       // For deletion
+  
+  createdAt     DateTime      @default(now())
+  
+  @@index([messageId])
+  @@map("ticket_attachments")
 }
 
 enum TicketStatus {

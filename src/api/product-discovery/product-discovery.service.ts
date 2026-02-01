@@ -40,8 +40,8 @@ export const fetchHotProductsFromRapidAPI = async () => {
       const response = await axios.request(options);
 
       if (!response.data?.data?.itemList || !Array.isArray(response.data.data.itemList)) {
-          console.log(`No items found on page ${currentPage}. Stopping job.`);
-          break;
+        console.log(`No items found on page ${currentPage}. Stopping job.`);
+        break;
       }
 
       const products = response.data.data.itemList;
@@ -62,11 +62,11 @@ export const fetchHotProductsFromRapidAPI = async () => {
         let currencyString: string | undefined;
 
         if (product.target_app_sale_price) {
-            priceString = product.target_app_sale_price;
-            currencyString = product.target_app_sale_price_currency || product.target_sale_price_currency;
+          priceString = product.target_app_sale_price;
+          currencyString = product.target_app_sale_price_currency || product.target_sale_price_currency;
         } else {
-            priceString = product.target_sale_price;
-            currencyString = product.target_sale_price_currency;
+          priceString = product.target_sale_price;
+          currencyString = product.target_sale_price_currency;
         }
 
         const finalPrice = parseFloat(priceString || "0") || 0;
@@ -78,7 +78,7 @@ export const fetchHotProductsFromRapidAPI = async () => {
           date: new Date().toISOString(),
           sales: product.lastest_volume,
         };
-        
+
         const productData = {
           productId: product.product_id,
           title: product.product_title,
@@ -94,7 +94,7 @@ export const fetchHotProductsFromRapidAPI = async () => {
             : [newHistoryEntry],
           shopName: product.shop_name,
           shopEvaluationRate: product.evaluate_rate,
-           shopUrl: product.shop_url,
+          shopUrl: product.shop_url,
           shopId: product.shop_id,
         };
 
