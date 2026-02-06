@@ -72,6 +72,70 @@ export const sendPasswordResetEmail = async (email: string, token: string) => {
   }
 };
 
+/**
+ * Sends a verification email when user requests to change their email address.
+ */
+export const sendEmailChangeVerification = async (
+  newEmail: string,
+  verificationCode: string,
+  firstName: string
+) => {
+  try {
+    const response = await resend.emails.send({
+      from: 'Security <noreply@dycom-club.com>',
+      to: [newEmail],
+      subject: 'Verify Your New Email Address',
+      html: `
+        <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; background-color: #f9fafb;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            
+            <!-- Header -->
+            <div style="background-color: #111317; padding: 30px; text-align: center;">
+               <h2 style="color: #ffffff; margin: 0;">Dycom Club</h2>
+            </div>
+
+            <!-- Body -->
+            <div style="padding: 30px;">
+              <h2 style="color: #111317; margin-top: 0;">Verify Your New Email</h2>
+              <p style="font-size: 16px; line-height: 1.5; color: #4b5563;">
+                Hi ${firstName},
+              </p>
+              <p style="font-size: 16px; line-height: 1.5; color: #4b5563;">
+                You requested to change your email address to this one. Please use the verification code below to confirm:
+              </p>
+
+              <!-- Code Box -->
+              <div style="background-color: #f3f4f6; border-radius: 8px; padding: 25px; margin: 25px 0; text-align: center;">
+                <p style="margin: 0 0 10px 0; color: #6b7280; font-size: 14px;">Your verification code:</p>
+                <h1 style="letter-spacing: 8px; font-size: 36px; margin: 0; color: #111317;">${verificationCode}</h1>
+              </div>
+
+              <p style="font-size: 14px; color: #6b7280; text-align: center;">
+                This code expires in <strong>1 hour</strong>.
+              </p>
+              
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
+              
+              <p style="font-size: 14px; color: #9ca3af; text-align: center;">
+                If you didn't request this change, please ignore this email. Your current email will remain unchanged.
+              </p>
+            </div>
+          </div>
+        </div>
+      `
+    });
+
+    if (response.error) {
+      console.error('Resend Error:', response.error);
+      return { success: false, error: response.error };
+    }
+    return { success: true, id: response.data?.id };
+  } catch (error) {
+    console.error('Resend Execution Error:', error);
+    return { success: false, error };
+  }
+};
+
 
 
 /**

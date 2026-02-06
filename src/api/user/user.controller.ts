@@ -268,3 +268,138 @@ export const markWelcomeAsSeen = async (req: AuthenticatedRequest, res: Response
     return res.status(500).json({ error: 'Internal server error.' });
   }
 };
+
+/**
+ * @description Request to change the user's email address. Sends verification to the NEW email.
+ * @route POST /api/profile/request-email-change
+ */
+export const requestEmailChange = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+    }
+    const { userId } = req.user;
+    const { newEmail } = req.body;
+
+    // 1. Validate input
+    if (!newEmail || !newEmail.includes('@')) {
+      return res.status(400).json({ error: 'A valid email address is required.' });
+    }
+
+    const normalizedEmail = newEmail.toLowerCase().trim();
+
+    // 2. Check if already using this email
+    const currentUser = await prisma.user.findUnique({ where: { id: userId } });
+    if (currentUser?.email === normalizedEmail) {
+      return res.status(400).json({ error: 'This is already your current email address.' });
+    }
+
+    // 3. Check if email is taken by another user
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'This email address is already in use.' });
+    }
+
+    // 4. Generate 6-digit verification code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+
+    // 5. Save pending email change
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        pendingEmail: normalizedEmail,
+        emailChangeToken: verificationCode,
+        emailChangeExpires: expiresAt,
+      },
+    });
+
+    // 6. Send verification email to the NEW address
+    const { sendEmailChangeVerification } = await import('../../utils/sendEmail');
+    await sendEmailChangeVerification(normalizedEmail, verificationCode, currentUser?.firstName || 'User');
+
+    return res.status(200).json({
+      message: 'Verification code sent to your new email address.',
+      pendingEmail: normalizedEmail
+    });
+
+  } catch (error) {
+    console.error('Error requesting email change:', error);
+    return res.status(500).json({ error: 'An internal server error occurred.' });
+  }
+};
+
+/**
+ * @description Confirm email change with verification code
+ * @route POST /api/profile/confirm-email-change
+ */
+export const confirmEmailChange = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+    }
+    const { userId } = req.user;
+    const { code } = req.body;
+
+    // 1. Validate input
+    if (!code || code.length !== 6) {
+      return res.status(400).json({ error: 'A valid 6-digit verification code is required.' });
+    }
+
+    // 2. Get user with pending email data
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    if (!user.pendingEmail || !user.emailChangeToken) {
+      return res.status(400).json({ error: 'No pending email change request found.' });
+    }
+
+    // 3. Check if code matches
+    if (user.emailChangeToken !== code) {
+      return res.status(400).json({ error: 'Invalid verification code.' });
+    }
+
+    // 4. Check if expired
+    if (!user.emailChangeExpires || new Date() > user.emailChangeExpires) {
+      // Clear the expired request
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          pendingEmail: null,
+          emailChangeToken: null,
+          emailChangeExpires: null,
+        },
+      });
+      return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
+    }
+
+    // 5. Update email and clear pending fields
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        email: user.pendingEmail,
+        pendingEmail: null,
+        emailChangeToken: null,
+        emailChangeExpires: null,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    return res.status(200).json({
+      message: 'Email updated successfully. Please log in again with your new email.',
+      newEmail: updatedUser.email
+    });
+
+  } catch (error) {
+    console.error('Error confirming email change:', error);
+    return res.status(500).json({ error: 'An internal server error occurred.' });
+  }
+};

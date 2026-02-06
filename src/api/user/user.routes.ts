@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getUserProfile, updatePassword, getUserNotifications, updateUserProfile,markWelcomeAsSeen } from './user.controller';
+import { getUserProfile, updatePassword, getUserNotifications, updateUserProfile, markWelcomeAsSeen, requestEmailChange, confirmEmailChange } from './user.controller';
 
 const router = Router();
 
@@ -17,5 +17,8 @@ router.get('/notifications', getUserNotifications);
 router.patch('/me', updateUserProfile);
 router.patch('/welcome-seen', markWelcomeAsSeen);
 
+// Email change routes
+router.post('/request-email-change', requestEmailChange);
+router.post('/confirm-email-change', confirmEmailChange);
 
 export default router;

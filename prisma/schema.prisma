@@ -29,6 +29,9 @@ model User {
   otpExpiresAt             DateTime?
   resetPasswordExpires     DateTime?
   resetPasswordToken       String?            @unique
+  pendingEmail             String?
+  emailChangeToken         String?            @unique
+  emailChangeExpires       DateTime?
   coursePurchases          CoursePurchase[]
   notifications            Notification[]
   searchHistory            SearchHistory[]
