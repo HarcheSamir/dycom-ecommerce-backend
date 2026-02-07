@@ -374,6 +374,7 @@ model Ticket {
 
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
+  adminUnread Boolean        @default(true) // True when customer sends a new message
 
   messages    TicketMessage[]
   shopOrder   ShopOrder?
@@ -396,6 +397,11 @@ model TicketMessage {
   ticket     Ticket     @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
   attachments TicketAttachment[]
+
+  // Edit & Delete tracking
+  isDeleted  Boolean    @default(false)
+  deletedAt  DateTime?
+  editedAt   DateTime?
 
   createdAt  DateTime   @default(now())
 

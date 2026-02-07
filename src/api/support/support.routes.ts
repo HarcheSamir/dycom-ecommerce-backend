@@ -8,7 +8,9 @@ import {
     createUserTicket,
     getAllTicketsAdmin,
     adminReplyTicket,
-    adminGetTicketDetails
+    adminGetTicketDetails,
+    adminEditMessage,
+    adminDeleteMessage
 } from './support.controller';
 import { authMiddleware } from '../../middleware/auth.middleware';
 import { isAdminMiddleware } from '../../middleware/isAdmin.middleware';
@@ -57,5 +59,7 @@ router.post('/create', authMiddleware, upload.array('files', 5), createUserTicke
 router.get('/admin/all', authMiddleware, isAdminMiddleware, getAllTicketsAdmin);
 router.get('/admin/:ticketId', authMiddleware, isAdminMiddleware, adminGetTicketDetails);
 router.post('/admin/:ticketId/reply', authMiddleware, isAdminMiddleware, upload.array('files', 5), adminReplyTicket);
+router.patch('/admin/message/:messageId', authMiddleware, isAdminMiddleware, adminEditMessage);
+router.delete('/admin/message/:messageId', authMiddleware, isAdminMiddleware, adminDeleteMessage);
 
 export default router;

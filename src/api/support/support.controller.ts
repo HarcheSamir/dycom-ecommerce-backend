@@ -113,6 +113,7 @@ export const getTicketByAccessToken = async (req: Request, res: Response) => {
             where: { id: ticketId as string },
             include: {
                 messages: {
+                    where: { isDeleted: false }, // Hide deleted messages from users
                     orderBy: { createdAt: 'asc' },
                     include: {
                         attachments: true
@@ -158,10 +159,15 @@ export const replyViaAccessToken = async (req: Request, res: Response) => {
             await createAttachmentsFromFiles(newMessage.id, files, ticketId as string);
         }
 
-        // Re-open ticket if it was closed
-        if (ticket.status === 'CLOSED' || ticket.status === 'RESOLVED') {
-            await prisma.ticket.update({ where: { id: ticketId as string }, data: { status: 'OPEN' } });
-        }
+        // Re-open ticket if it was closed/in-progress, and mark as unread for admin
+        const shouldReopen = ticket.status === 'CLOSED' || ticket.status === 'RESOLVED' || ticket.status === 'IN_PROGRESS';
+        await prisma.ticket.update({
+            where: { id: ticketId as string },
+            data: {
+                status: shouldReopen ? 'OPEN' : undefined,
+                adminUnread: true // Customer replied, admin needs to see this
+            }
+        });
 
         // ALERT ADMINS (Guest/User replied via magic link)
         await sendTicketReplyAlertToAdmins(
@@ -262,7 +268,10 @@ export const getAllTicketsAdmin = async (req: AuthenticatedRequest, res: Respons
 
         const tickets = await prisma.ticket.findMany({
             where,
-            orderBy: { updatedAt: 'desc' }, // Updated recently first
+            orderBy: [
+                { adminUnread: 'desc' }, // Unread tickets first
+                { updatedAt: 'desc' }     // Then by most recently updated
+            ],
             take: Number(limit),
             skip: (Number(page) - 1) * Number(limit),
             include: {
@@ -274,6 +283,11 @@ export const getAllTicketsAdmin = async (req: AuthenticatedRequest, res: Respons
                         subscriptionStatus: true,
                         installmentsPaid: true // LTV Context
                     }
+                },
+                messages: {
+                    take: 1,
+                    orderBy: { createdAt: 'desc' },
+                    where: { isInternal: false } // Only show public messages as preview
                 },
                 _count: { select: { messages: true } }
             }
@@ -313,8 +327,8 @@ export const adminReplyTicket = async (req: AuthenticatedRequest, res: Response)
             await createAttachmentsFromFiles(ticketMsg.id, files, ticketId as string);
         }
 
-        // 3. Update Ticket Status (optional)
-        const updateData: any = { updatedAt: new Date() };
+        // 3. Update Ticket Status and mark as read (admin replied)
+        const updateData: any = { updatedAt: new Date(), adminUnread: false };
         if (newStatus) updateData.status = newStatus;
 
         const ticket = await prisma.ticket.update({
@@ -371,8 +385,89 @@ export const adminGetTicketDetails = async (req: AuthenticatedRequest, res: Resp
             }
         });
         if (!ticket) return res.status(404).json({ error: "Ticket not found" });
+
+        // Mark as read when admin opens the ticket
+        if (ticket.adminUnread) {
+            await prisma.ticket.update({ where: { id: ticketId as string }, data: { adminUnread: false } });
+        }
+
         res.status(200).json(ticket);
     } catch (error) {
         res.status(500).json({ error: 'Error fetching details' });
+    }
+};
+
+// --- ADMIN: EDIT MESSAGE ---
+export const adminEditMessage = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const messageId = req.params.messageId as string;
+        const { content } = req.body;
+
+        if (!content || !content.trim()) {
+            return res.status(400).json({ error: 'Content is required' });
+        }
+
+        // Verify message exists and was sent by admin
+        const message = await prisma.ticketMessage.findUnique({ where: { id: messageId } });
+
+        if (!message) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+
+        if (message.senderType !== 'ADMIN') {
+            return res.status(403).json({ error: 'Can only edit admin messages' });
+        }
+
+        if (message.isDeleted) {
+            return res.status(400).json({ error: 'Cannot edit a deleted message' });
+        }
+
+        const updated = await prisma.ticketMessage.update({
+            where: { id: messageId },
+            data: {
+                content: content.trim(),
+                editedAt: new Date()
+            }
+        });
+
+        res.status(200).json(updated);
+    } catch (error) {
+        console.error('Error editing message:', error);
+        res.status(500).json({ error: 'Failed to edit message' });
+    }
+};
+
+// --- ADMIN: SOFT DELETE MESSAGE ---
+export const adminDeleteMessage = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const messageId = req.params.messageId as string;
+
+        // Verify message exists and was sent by admin
+        const message = await prisma.ticketMessage.findUnique({ where: { id: messageId } });
+
+        if (!message) {
+            return res.status(404).json({ error: 'Message not found' });
+        }
+
+        if (message.senderType !== 'ADMIN') {
+            return res.status(403).json({ error: 'Can only delete admin messages' });
+        }
+
+        if (message.isDeleted) {
+            return res.status(400).json({ error: 'Message already deleted' });
+        }
+
+        const deleted = await prisma.ticketMessage.update({
+            where: { id: messageId },
+            data: {
+                isDeleted: true,
+                deletedAt: new Date()
+            }
+        });
+
+        res.status(200).json(deleted);
+    } catch (error) {
+        console.error('Error deleting message:', error);
+        res.status(500).json({ error: 'Failed to delete message' });
     }
 };
