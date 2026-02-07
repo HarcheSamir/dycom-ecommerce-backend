@@ -1300,8 +1300,35 @@ export const getPastDueUsers = async (req: Request, res: Response) => {
     }
 };
 
+/**
+ * Get unread counts for admin notification badges.
+ * Returns counts for support tickets and shop orders.
+ */
+export const getAdminUnreadCounts = async (req: Request, res: Response) => {
+    try {
+        const [supportUnread, shopOrdersPending] = await prisma.$transaction([
+            // Count tickets with adminUnread = true
+            prisma.ticket.count({
+                where: { adminUnread: true }
+            }),
+            // Count shop orders in SUBMITTED status that admin hasn't viewed
+            prisma.shopOrder.count({
+                where: {
+                    status: 'SUBMITTED',
+                    adminViewed: false
+                }
+            })
+        ]);
 
-
-
+        res.status(200).json({
+            support: supportUnread,
+            shopOrders: shopOrdersPending,
+            total: supportUnread + shopOrdersPending
+        });
+    } catch (error) {
+        console.error('Error fetching unread counts:', error);
+        res.status(500).json({ error: 'Failed to fetch unread counts.' });
+    }
+};
 
 

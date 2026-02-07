@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { PrismaClient, SubscriptionStatus } from "@prisma/client";
-import { sendPurchaseConfirmationEmail, sendShopOrderConfirmationEmail } from "../../utils/sendEmail";
+import { sendPurchaseConfirmationEmail, sendShopOrderConfirmationEmail, sendNewShopOrderAlertToAdmins } from "../../utils/sendEmail";
 import { shopOrderService } from "../shop-order/shop-order.service";
 import bcrypt from 'bcrypt';
 
@@ -134,12 +134,22 @@ async function handleShopOrderPayment(data: any) {
 
     console.log(`✅ Shop order payment processed successfully for order: ${order.id}`);
 
-    // Send confirmation email
+    // Send confirmation email to customer
     const productName = data.product?.name || order.pricingTier;
     await sendShopOrderConfirmationEmail(
         user.email,
         user.firstName || 'Client',
         order.id,
+        productName,
+        purchase.price.value,
+        purchase.price.currency_value || 'EUR'
+    );
+
+    // Send alert to admins
+    await sendNewShopOrderAlertToAdmins(
+        order.id,
+        user.email,
+        user.firstName || 'Client',
         productName,
         purchase.price.value,
         purchase.price.currency_value || 'EUR'

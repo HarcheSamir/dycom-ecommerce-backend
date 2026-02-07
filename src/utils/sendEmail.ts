@@ -370,6 +370,8 @@ export const sendShopOrderConfirmationEmail = async (
   }
 };
 
+import { ADMIN_EMAILS } from '../config/adminEmails';
+
 /**
  * Sends an alert to Admins when a NEW ticket is created.
  */
@@ -380,14 +382,12 @@ export const sendNewTicketAlertToAdmins = async (
   userName: string | null,
   messagePreview: string
 ) => {
-  const admins = ['Younesbbl87@outlook.fr'];
-  // Link to Admin Dashboard Ticket Detail
   const adminTicketLink = `${FRONTEND_URL}/dashboard/admin/support?ticketId=${ticketId}`;
 
   try {
     await resend.emails.send({
       from: 'Dycom Support Bot <noreply@dycom-club.com>',
-      to: admins,
+      to: ADMIN_EMAILS,
       subject: `[New Ticket] ${subject}`,
       html: `
         <div style="font-family: sans-serif; padding: 20px; color: #333;">
@@ -417,13 +417,12 @@ export const sendTicketReplyAlertToAdmins = async (
   userName: string | null,
   messagePreview: string
 ) => {
-  const admins = ['Younesbbl87@outlook.fr', 'harchesamir007@gmail.com'];
   const adminTicketLink = `${FRONTEND_URL}/dashboard/admin/support?ticketId=${ticketId}`;
 
   try {
     await resend.emails.send({
       from: 'Dycom Support Bot <noreply@dycom-club.com>',
-      to: admins,
+      to: ADMIN_EMAILS,
       subject: `[Ticket Reply] #${ticketId.slice(0, 8)} - New Message`,
       html: `
         <div style="font-family: sans-serif; padding: 20px; color: #333;">
@@ -440,5 +439,108 @@ export const sendTicketReplyAlertToAdmins = async (
     });
   } catch (error) {
     console.error('Failed to send Ticket Reply Alert to Admins:', error);
+  }
+};
+
+/**
+ * Sends an alert to Admins when a NEW Shop Order is created/paid.
+ */
+export const sendNewShopOrderAlertToAdmins = async (
+  orderId: string,
+  userEmail: string,
+  userName: string,
+  tierName: string,
+  amount: number,
+  currency: string
+) => {
+  const adminOrderLink = `${FRONTEND_URL}/dashboard/admin/shop-orders?orderId=${orderId}`;
+  const formattedAmount = new Intl.NumberFormat('fr-FR', { style: 'currency', currency }).format(amount / 100);
+
+  try {
+    await resend.emails.send({
+      from: 'Dycom Shop Bot <noreply@dycom-club.com>',
+      to: ADMIN_EMAILS,
+      subject: `[New Order] ${tierName} - ${formattedAmount}`,
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #10B981;">New Shop Order Received!</h2>
+          <p><strong>Customer:</strong> ${userName} (${userEmail})</p>
+          <p><strong>Product:</strong> ${tierName}</p>
+          <p><strong>Amount:</strong> ${formattedAmount}</p>
+          <p><strong>Order ID:</strong> #${orderId.slice(0, 8)}</p>
+          <p><strong>Time:</strong> ${new Date().toLocaleString('fr-FR')}</p>
+          <br />
+          <a href="${adminOrderLink}" style="background-color: #10B981; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View Order Details</a>
+        </div>
+      `
+    });
+  } catch (error) {
+    console.error('Failed to send New Shop Order Alert to Admins:', error);
+  }
+};
+
+/**
+ * Sends an alert to Admins when a payment fails.
+ */
+export const sendPaymentFailedAlertToAdmins = async (
+  userId: string,
+  userEmail: string,
+  userName: string,
+  reason: string,
+  context: string // e.g. "Subscription renewal", "Shop order"
+) => {
+  const adminUserLink = `${FRONTEND_URL}/dashboard/admin/users/${userId}`;
+
+  try {
+    await resend.emails.send({
+      from: 'Dycom Payment Bot <noreply@dycom-club.com>',
+      to: ADMIN_EMAILS,
+      subject: `[Payment Failed] ${userName} - ${context}`,
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #EF4444;">Payment Failed</h2>
+          <p><strong>Customer:</strong> ${userName} (${userEmail})</p>
+          <p><strong>Context:</strong> ${context}</p>
+          <p><strong>Reason:</strong> ${reason}</p>
+          <p><strong>Time:</strong> ${new Date().toLocaleString('fr-FR')}</p>
+          <br />
+          <a href="${adminUserLink}" style="background-color: #EF4444; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View User Profile</a>
+        </div>
+      `
+    });
+  } catch (error) {
+    console.error('Failed to send Payment Failed Alert to Admins:', error);
+  }
+};
+
+/**
+ * Sends an alert to Admins when a new user signs up.
+ */
+export const sendNewUserSignupAlertToAdmins = async (
+  userId: string,
+  userEmail: string,
+  firstName: string,
+  lastName: string
+) => {
+  const adminUserLink = `${FRONTEND_URL}/dashboard/admin/users/${userId}`;
+
+  try {
+    await resend.emails.send({
+      from: 'Dycom User Bot <noreply@dycom-club.com>',
+      to: ADMIN_EMAILS,
+      subject: `[New User] ${firstName} ${lastName} just signed up!`,
+      html: `
+        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #8B5CF6;">New User Registration</h2>
+          <p><strong>Name:</strong> ${firstName} ${lastName}</p>
+          <p><strong>Email:</strong> ${userEmail}</p>
+          <p><strong>Time:</strong> ${new Date().toLocaleString('fr-FR')}</p>
+          <br />
+          <a href="${adminUserLink}" style="background-color: #8B5CF6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">View User Profile</a>
+        </div>
+      `
+    });
+  } catch (error) {
+    console.error('Failed to send New User Signup Alert to Admins:', error);
   }
 };

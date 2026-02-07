@@ -508,6 +508,9 @@ model ShopOrder {
   // Order Status
   status              ShopOrderStatus   @default(DRAFT)
   
+  // Admin notification tracking
+  adminViewed         Boolean           @default(false)
+  
   // Step 1: Brand
   brandName           String?
   

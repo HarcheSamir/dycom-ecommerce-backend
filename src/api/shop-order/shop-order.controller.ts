@@ -4,6 +4,9 @@ import { Response } from 'express';
 import { AuthenticatedRequest } from '../../utils/AuthRequestType';
 import { shopOrderService } from './shop-order.service';
 import { v2 as cloudinary } from 'cloudinary';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 // Cloudinary config (should match your existing setup)
 cloudinary.config({
@@ -261,6 +264,14 @@ export const shopOrderController = {
 
             if (!order) {
                 return res.status(404).json({ error: 'Order not found' });
+            }
+
+            // Mark order as viewed by admin (for badge clearing)
+            if (!order.adminViewed) {
+                await prisma.shopOrder.update({
+                    where: { id: orderId as string },
+                    data: { adminViewed: true }
+                });
             }
 
             return res.json(order);

@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { sendOtpEmail, sendPasswordResetEmail } from '../../utils/sendEmail';
+import { sendOtpEmail, sendPasswordResetEmail, sendNewUserSignupAlertToAdmins } from '../../utils/sendEmail';
 import crypto from 'crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
@@ -35,6 +35,14 @@ export const authService = {
         accountType: 'USER',
       },
     });
+
+    // Alert admins about new signup
+    await sendNewUserSignupAlertToAdmins(
+      newUser.id,
+      newUser.email,
+      newUser.firstName || '',
+      newUser.lastName || ''
+    );
 
     const payload = { userId: newUser.id, email: newUser.email, firstName: newUser.firstName, lastName: newUser.lastName, accountType: newUser.accountType };
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });

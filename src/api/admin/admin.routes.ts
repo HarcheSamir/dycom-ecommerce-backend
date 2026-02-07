@@ -5,19 +5,23 @@ import {
     getAdminDashboardStats, createCourse, getAdminCourses, getCourseDetails,
     createSection, addVideoToSection, updateCourse, deleteCourse,
     updateSection, deleteSection, updateVideo, deleteVideo, updateVideoOrder,
-    getSettings, updateSettings,getMembershipPrices, updateMembershipPrices ,    updateSectionOrder,  getAdminUsers, grantLifetimeAccess ,
-    exportAdminUsers , getAdminUserDetails,updateUserSubscription, syncStripeSubscription, addStripePayment,getPastDueUsers 
+    getSettings, updateSettings, getMembershipPrices, updateMembershipPrices, updateSectionOrder, getAdminUsers, grantLifetimeAccess,
+    exportAdminUsers, getAdminUserDetails, updateUserSubscription, syncStripeSubscription, addStripePayment, getPastDueUsers,
+    getAdminUnreadCounts
 
 } from './admin.controller';
 import { getAffiliateLeaderboard } from './affiliate.controller';
-import { getCloserStats,getStripeFinancialStats, getStripeCustomers, getStripeTransactions,   assignCloserToTransaction } from './stripe.controller';
+import { getCloserStats, getStripeFinancialStats, getStripeCustomers, getStripeTransactions, assignCloserToTransaction } from './stripe.controller';
 
 const router = Router();
 
 // Stats
 router.get('/stats', getAdminDashboardStats);
 
-router.get('/users/export', exportAdminUsers); 
+// Unread counts for notification badges
+router.get('/unread-counts', getAdminUnreadCounts);
+
+router.get('/users/export', exportAdminUsers);
 
 
 // Course Management
@@ -58,7 +62,7 @@ router.post('/financials/assign-closer', assignCloserToTransaction);
 router.get('/financials/closers', getCloserStats);
 
 router.get('/users', getAdminUsers);
-router.get('/users/:userId/details', getAdminUserDetails); 
+router.get('/users/:userId/details', getAdminUserDetails);
 router.put('/users/:userId/grant-lifetime', grantLifetimeAccess);
 
 router.put('/users/:userId/subscription', updateUserSubscription); // Manual edit
