@@ -3,6 +3,9 @@ import { prisma } from '../../index';
 import Stripe from 'stripe';
 import { Language } from '@prisma/client';
 import { SubscriptionStatus, CourseCategory } from '@prisma/client';
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import { sendWelcomeWithPasswordSetup, sendPurchaseConfirmationEmail } from '../../utils/sendEmail';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -1328,6 +1331,103 @@ export const getAdminUnreadCounts = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error fetching unread counts:', error);
         res.status(500).json({ error: 'Failed to fetch unread counts.' });
+    }
+};
+
+/**
+ * Manually create a user with LIFETIME_ACCESS.
+ * - If user exists: Upgrade to LIFETIME + send purchase email
+ * - If new: Create user + generate token + send welcome email (password setup)
+ */
+export const createLifetimeUser = async (req: Request, res: Response) => {
+    const { email, firstName, lastName } = req.body;
+
+    if (!email || !firstName || !lastName) {
+        return res.status(400).json({ error: 'Email, First Name, and Last Name are required.' });
+    }
+
+    try {
+        const normalizedEmail = email.toLowerCase().trim();
+        let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+        let isNewUser = false;
+
+        // Generate a fake transaction code for internal tracking
+        const transactionCode = `MANUAL_ADMIN_${Date.now()}`;
+
+        if (!user) {
+            console.log(`👤 Admin creating new LIFETIME user: ${normalizedEmail}`);
+            isNewUser = true;
+
+            // Generate random password (placeholder)
+            const tempPassword = crypto.randomBytes(16).toString('hex');
+            const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+            // Generate permanent account setup token
+            const accountSetupToken = crypto.randomBytes(32).toString('hex');
+
+            user = await prisma.user.create({
+                data: {
+                    email: normalizedEmail,
+                    password: hashedPassword,
+                    firstName: firstName.trim(),
+                    lastName: lastName.trim(),
+                    accountType: 'USER',
+                    status: 'ACTIVE',
+                    subscriptionStatus: 'LIFETIME_ACCESS',
+                    installmentsPaid: 1,
+                    installmentsRequired: 1,
+                    hotmartTransactionCode: transactionCode,
+                    accountSetupToken: accountSetupToken,
+                    availableCourseDiscounts: 0
+                }
+            });
+
+            // Send welcome email with password setup link
+            await sendWelcomeWithPasswordSetup(normalizedEmail, firstName, accountSetupToken);
+
+        } else {
+            console.log(`👤 Admin upgrading existing user to LIFETIME: ${user.id}`);
+
+            await prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    subscriptionStatus: 'LIFETIME_ACCESS',
+                    installmentsPaid: 1,
+                    installmentsRequired: 1,
+                    hotmartTransactionCode: transactionCode
+                }
+            });
+
+            // Send purchase confirmation email for existing users
+            await sendPurchaseConfirmationEmail(
+                normalizedEmail,
+                user.firstName,
+                "Dycom Academie (Lifetime Access - Admin Grant)",
+                0,
+                "EUR",
+                null
+            );
+        }
+
+        // Log Transaction for records
+        await prisma.transaction.create({
+            data: {
+                userId: user.id,
+                amount: 0,
+                currency: 'EUR',
+                status: 'succeeded',
+                hotmartTransactionCode: transactionCode
+            }
+        });
+
+        res.status(200).json({
+            message: isNewUser ? 'User created and invited successfully.' : 'User upgraded successfully.',
+            user
+        });
+
+    } catch (error) {
+        console.error('Error creating lifetime user:', error);
+        res.status(500).json({ error: 'Failed to create user.' });
     }
 };
 
