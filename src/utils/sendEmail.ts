@@ -73,6 +73,69 @@ export const sendPasswordResetEmail = async (email: string, token: string) => {
 };
 
 /**
+ * Sends a welcome email to new Hotmart users with a link to set their password.
+ * The token is permanent (no expiry).
+ */
+export const sendWelcomeWithPasswordSetup = async (
+  email: string,
+  firstName: string,
+  token: string
+) => {
+  const setupLink = `${FRONTEND_URL}/set-password?token=${token}`;
+
+  try {
+    const response = await resend.emails.send({
+      from: 'Dycom Club <noreply@dycom-club.com>',
+      to: [email],
+      subject: '🎉 Bienvenue chez Dycom Club - Finalisez votre compte',
+      html: `
+        <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #f8f9fa;">
+          <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 40px; text-align: center;">
+            <img src="https://dycom-club.com/logo2.png" alt="Dycom Club" style="height: 50px; margin-bottom: 30px;" />
+            
+            <h1 style="color: #ffffff; font-size: 28px; margin-bottom: 15px;">Bienvenue ${firstName} ! 🎉</h1>
+            
+            <p style="color: #b8c1cc; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+              Votre paiement a été confirmé et votre accès à vie à Dycom Club est maintenant activé !
+            </p>
+
+            <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 25px; margin-bottom: 30px;">
+              <p style="color: #ffffff; font-size: 16px; margin-bottom: 20px;">
+                <strong>Dernière étape :</strong> Créez votre mot de passe pour accéder à votre espace membre.
+              </p>
+              
+              <a href="${setupLink}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                Créer mon mot de passe
+              </a>
+            </div>
+
+            <p style="color: #8892a0; font-size: 14px;">
+              Ce lien est personnel et permanent. Conservez-le précieusement.
+            </p>
+          </div>
+
+          <div style="text-align: center; padding-top: 30px;">
+            <p style="color: #6b7280; font-size: 12px;">
+              © ${new Date().getFullYear()} Dycom Club. Tous droits réservés.
+            </p>
+          </div>
+        </div>
+      `
+    });
+
+    if (response.error) {
+      console.error('Resend Error (Welcome):', response.error);
+      return { success: false, error: response.error };
+    }
+    console.log(`✅ Welcome email sent to ${email}`);
+    return { success: true, id: response.data?.id };
+  } catch (error) {
+    console.error('Resend Execution Error (Welcome):', error);
+    return { success: false, error };
+  }
+};
+
+/**
  * Sends a verification email when user requests to change their email address.
  */
 export const sendEmailChangeVerification = async (

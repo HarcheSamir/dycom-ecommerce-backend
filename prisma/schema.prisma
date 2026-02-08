@@ -46,6 +46,7 @@ model User {
   seenSections             UserSeenSection[]  
   seenCourses              UserSeenCourse[]
   hasSeenWelcomeModal      Boolean            @default(false)
+  accountSetupToken        String?            @unique
   shopOrders               ShopOrder[]
 
   @@index([referredById], map: "users_referredById_fkey")

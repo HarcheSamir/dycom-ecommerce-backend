@@ -32,12 +32,12 @@ export const authController = {
                 return res.status(202).json({
                     message: 'OTP sent to admin email.',
                     requireOtp: true,
-                    email: result.email 
+                    email: result.email
                 });
             }
 
             // CASE 2: Standard Login (User object)
-            const user = result; 
+            const user = result;
 
             // Create JWT Payload
             const payload = {
@@ -57,7 +57,7 @@ export const authController = {
                 user: user,
             });
         } catch (error: any) {
-            res.status(401).json({ message: error.message }); 
+            res.status(401).json({ message: error.message });
         }
     },
 
@@ -65,7 +65,7 @@ export const authController = {
     async verifyAdminOtp(req: Request, res: Response) {
         try {
             const { email, otp } = req.body;
-            
+
             if (!email || !otp) {
                 return res.status(400).json({ message: 'Email and OTP are required.' });
             }
@@ -83,7 +83,7 @@ export const authController = {
             };
 
             // Shorter expiration for admin sessions for security
-            const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' }); 
+            const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '12h' });
 
             res.status(200).json({
                 message: 'Admin verification successful',
@@ -100,9 +100,9 @@ export const authController = {
         try {
             const { email } = req.body;
             if (!email) return res.status(400).json({ message: "Email is required" });
-            
+
             await authService.requestPasswordReset(email);
-            
+
             // Always return 200 for security (prevent email enumeration)
             res.status(200).json({ message: "If an account exists, a reset link has been sent." });
         } catch (error: any) {
@@ -119,6 +119,27 @@ export const authController = {
 
             await authService.resetPassword(token, newPassword);
             res.status(200).json({ message: "Password reset successfully. You can now login." });
+        } catch (error: any) {
+            res.status(400).json({ message: error.message });
+        }
+    },
+
+    /**
+     * Set password for new Hotmart users using permanent accountSetupToken
+     */
+    async setPassword(req: Request, res: Response) {
+        try {
+            const { token, newPassword } = req.body;
+            if (!token || !newPassword) {
+                return res.status(400).json({ message: "Token and password are required" });
+            }
+
+            if (newPassword.length < 6) {
+                return res.status(400).json({ message: "Password must be at least 6 characters" });
+            }
+
+            const result = await authService.setPasswordWithToken(token, newPassword);
+            res.status(200).json(result);
         } catch (error: any) {
             res.status(400).json({ message: error.message });
         }

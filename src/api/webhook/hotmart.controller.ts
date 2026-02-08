@@ -1,8 +1,9 @@
 import { Request, Response } from "express";
 import { PrismaClient, SubscriptionStatus } from "@prisma/client";
-import { sendPurchaseConfirmationEmail, sendShopOrderConfirmationEmail, sendNewShopOrderAlertToAdmins } from "../../utils/sendEmail";
+import { sendPurchaseConfirmationEmail, sendShopOrderConfirmationEmail, sendNewShopOrderAlertToAdmins, sendWelcomeWithPasswordSetup } from "../../utils/sendEmail";
 import { shopOrderService } from "../shop-order/shop-order.service";
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -197,13 +198,18 @@ async function handleApprovedPurchase(data: any) {
 
     // 1. Check if user exists
     let user = await prisma.user.findUnique({ where: { email } });
+    let isNewUser = false;
 
     if (!user) {
         console.log(`👤 Creating new user via Hotmart: ${email}`);
+        isNewUser = true;
 
-        // Generate random password
-        const tempPassword = Math.random().toString(36).slice(-8) + "1!";
+        // Generate random password (user will set their own via email link)
+        const tempPassword = crypto.randomBytes(16).toString('hex');
         const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+        // Generate permanent account setup token
+        const accountSetupToken = crypto.randomBytes(32).toString('hex');
 
         // Name parsing
         const nameParts = name.split(' ');
@@ -224,13 +230,14 @@ async function handleApprovedPurchase(data: any) {
                 installmentsPaid: 1,
                 installmentsRequired: 1,
                 hotmartTransactionCode: transactionCode,
+                accountSetupToken: accountSetupToken,
                 // We default to 0 available discounts for new paid users unless specified
                 availableCourseDiscounts: 0
             }
         });
 
-        // Optional: Send a specific "Welcome" email with the temp password here
-        // For now, the purchase confirmation is sent below.
+        // Send welcome email with password setup link
+        await sendWelcomeWithPasswordSetup(email, firstName, accountSetupToken);
     } else {
         console.log(`👤 Upgrading existing user: ${user.id}`);
         // If they were a lead or free user, upgrade them
@@ -243,6 +250,16 @@ async function handleApprovedPurchase(data: any) {
                 hotmartTransactionCode: transactionCode
             }
         });
+
+        // Send purchase confirmation email for existing users
+        await sendPurchaseConfirmationEmail(
+            email,
+            user.firstName,
+            "Dycom Academie (Lifetime Access)",
+            amount,
+            currency,
+            null
+        );
     }
 
     // 2. Log Transaction (Idempotent check)
@@ -261,16 +278,6 @@ async function handleApprovedPurchase(data: any) {
             }
         });
     }
-
-    // 3. Send Confirmation Email
-    await sendPurchaseConfirmationEmail(
-        email,
-        user.firstName,
-        "Dycom Academie (Lifetime Access)",
-        amount,
-        currency,
-        null // Hotmart handles invoices, or pass `purchase.sckPaymentLink` if you want
-    );
 }
 
 async function handleRevokeAccess(data: any) {

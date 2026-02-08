@@ -166,5 +166,34 @@ export const authService = {
     });
 
     return { message: 'Password updated successfully' };
+  },
+
+  /**
+   * Set password for new Hotmart users using permanent accountSetupToken.
+   * No expiry - token is permanent until used.
+   */
+  async setPasswordWithToken(token: string, newPassword: string) {
+    // Find user by accountSetupToken (no expiry check)
+    const user = await prisma.user.findFirst({
+      where: { accountSetupToken: token }
+    });
+
+    if (!user) {
+      throw new Error('Invalid setup token. Please contact support.');
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update password and clear token (one-time use)
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        accountSetupToken: null
+      }
+    });
+
+    return { message: 'Password set successfully. You can now login.' };
   }
 };
