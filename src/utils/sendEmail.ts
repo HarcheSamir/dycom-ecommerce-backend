@@ -93,14 +93,14 @@ export const sendWelcomeWithPasswordSetup = async (
           <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 40px; text-align: center;">
             <img src="https://dycom-club.com/logo2.png" alt="Dycom Club" style="height: 50px; margin-bottom: 30px;" />
             
-            <h1 style="color: #ffffff; font-size: 28px; margin-bottom: 15px;">Bienvenue ${firstName} ! 🎉</h1>
+            <h1 style="color: #ffffff !important; font-size: 28px; margin-bottom: 15px;">Bienvenue ${firstName} ! 🎉</h1>
             
-            <p style="color: #b8c1cc; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+            <p style="color: #b8c1cc !important; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
               Votre paiement a été confirmé et votre accès à vie à Dycom Club est maintenant activé !
             </p>
 
             <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 25px; margin-bottom: 30px;">
-              <p style="color: #ffffff; font-size: 16px; margin-bottom: 20px;">
+              <p style="color: #ffffff !important; font-size: 16px; margin-bottom: 20px;">
                 <strong>Dernière étape :</strong> Créez votre mot de passe pour accéder à votre espace membre.
               </p>
               
