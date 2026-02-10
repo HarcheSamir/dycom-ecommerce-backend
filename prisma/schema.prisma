@@ -48,6 +48,7 @@ model User {
   hasSeenWelcomeModal      Boolean            @default(false)
   accountSetupToken        String?            @unique
   shopOrders               ShopOrder[]
+  agentConversation        AgentConversation?
 
   @@index([referredById], map: "users_referredById_fkey")
   @@map("users")
@@ -583,6 +584,37 @@ model ShopOrder {
   @@index([paymentStatus])
   @@map("shop_orders")
 }
+
+// --- ACADEMY AGENT SYSTEM ---
+
+model AgentConversation {
+  id               String         @id @default(uuid())
+  userId           String         @unique
+  threadId         String         // OpenAI Thread ID
+  dailyMessageCount Int            @default(0)
+  lastMessageDate  DateTime       @default(now()) // To reset quota
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages         AgentMessage[]
+  
+  @@map("agent_conversations")
+}
+
+model AgentMessage {
+  id             String            @id @default(uuid())
+  conversationId String
+  role           String            // "user" or "assistant"
+  content        String            @db.Text
+  createdAt      DateTime          @default(now())
+  
+  conversation   AgentConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  
+  @@index([conversationId])
+  @@map("agent_messages")
+}
+
 
 model ShopOrderFile {
   id            String      @id @default(uuid())
