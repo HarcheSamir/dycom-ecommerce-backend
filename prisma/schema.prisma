@@ -13,6 +13,7 @@ model User {
   lastName                 String
   email                    String             @unique
   phone                    String?
+  avatarUrl                String?
   password                 String
   status                   UserStatus         @default(ACTIVE)
   accountType              AccountType        @default(USER)

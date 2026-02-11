@@ -21,4 +21,10 @@ router.patch('/welcome-seen', markWelcomeAsSeen);
 router.post('/request-email-change', requestEmailChange);
 router.post('/confirm-email-change', confirmEmailChange);
 
+// User Avatar
+import multer from 'multer';
+import { uploadAvatar } from './user.controller';
+const upload = multer();
+router.post('/avatar', upload.single('avatar'), uploadAvatar);
+
 export default router;

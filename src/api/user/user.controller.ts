@@ -22,6 +22,7 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
         firstName: true,
         lastName: true,
         phone: true,
+        avatarUrl: true,
         status: true,
         accountType: true,
         createdAt: true,
@@ -238,6 +239,7 @@ export const updateUserProfile = async (req: AuthenticatedRequest, res: Response
         firstName: true,
         lastName: true,
         phone: true,
+        avatarUrl: true,
         status: true,
         accountType: true,
         createdAt: true,
@@ -252,7 +254,7 @@ export const updateUserProfile = async (req: AuthenticatedRequest, res: Response
   }
 };
 
-
+// Re-adding markWelcomeAsSeen properly
 export const markWelcomeAsSeen = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -266,6 +268,47 @@ export const markWelcomeAsSeen = async (req: AuthenticatedRequest, res: Response
   } catch (error) {
     console.error('Error marking welcome modal as seen:', error);
     return res.status(500).json({ error: 'Internal server error.' });
+  }
+};
+
+/**
+ * @description Upload user avatar
+ * @route POST /api/profile/avatar
+ */
+export const uploadAvatar = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized.' });
+    }
+    const { userId } = req.user;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded.' });
+    }
+
+    // Dynamic import to avoid circular dependencies if any, though here it's fine
+    const { uploadToCloudinary } = await import('../../utils/cloudinary');
+
+    const uploadResult = await uploadToCloudinary(file.buffer, {
+      folder: `user-avatars/${userId}`,
+      resource_type: 'image',
+      transformation: [
+        { width: 400, height: 400, crop: 'fill', gravity: 'face' } // Optimize for avatar
+      ]
+    });
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: uploadResult.secure_url },
+      select: { avatarUrl: true }
+    });
+
+    return res.status(200).json(updatedUser);
+
+  } catch (error) {
+    console.error('Error uploading avatar:', error);
+    return res.status(500).json({ error: 'Failed to upload avatar.' });
   }
 };
 
