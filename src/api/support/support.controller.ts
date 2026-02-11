@@ -388,7 +388,13 @@ export const adminGetTicketDetails = async (req: AuthenticatedRequest, res: Resp
 
         // Mark as read when admin opens the ticket
         if (ticket.adminUnread) {
-            await prisma.ticket.update({ where: { id: ticketId as string }, data: { adminUnread: false } });
+            await prisma.ticket.update({
+                where: { id: ticketId as string },
+                data: {
+                    adminUnread: false,
+                    updatedAt: ticket.updatedAt // Preserve existing updated timestamp
+                }
+            });
         }
 
         res.status(200).json(ticket);
