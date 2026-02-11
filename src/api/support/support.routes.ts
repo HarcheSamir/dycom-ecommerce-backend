@@ -37,6 +37,7 @@ const upload = multer({
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'application/zip',
             'application/x-zip-compressed',
+            'application/octet-stream',
         ];
         if (allowedMimes.includes(file.mimetype)) {
             cb(null, true);

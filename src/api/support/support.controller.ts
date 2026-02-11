@@ -12,9 +12,16 @@ const createAttachmentsFromFiles = async (messageId: string, files: Express.Mult
 
     for (const file of files) {
         try {
+            // Determine resource type based on mime type
+            let resourceType: 'auto' | 'image' | 'video' | 'raw' = 'raw';
+            if (file.mimetype.startsWith('image/')) resourceType = 'image';
+            else if (file.mimetype.startsWith('video/')) resourceType = 'video';
+
             const uploadResult = await uploadToCloudinary(file.buffer, {
                 folder: `support-tickets/${ticketId}`,
-                resource_type: 'auto'
+                resource_type: resourceType,
+                use_filename: true, // Keep original filename if possible
+                unique_filename: false
             });
 
             await prisma.ticketAttachment.create({
