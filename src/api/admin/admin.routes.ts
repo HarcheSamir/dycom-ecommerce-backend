@@ -7,7 +7,7 @@ import {
     updateSection, deleteSection, updateVideo, deleteVideo, updateVideoOrder,
     getSettings, updateSettings, getMembershipPrices, updateMembershipPrices, updateSectionOrder, getAdminUsers, grantLifetimeAccess,
     exportAdminUsers, getAdminUserDetails, updateUserSubscription, syncStripeSubscription, addStripePayment, getPastDueUsers,
-    getAdminUnreadCounts, createLifetimeUser
+    getAdminUnreadCounts, createUser
 
 } from './admin.controller';
 import { getAffiliateLeaderboard } from './affiliate.controller';
@@ -64,7 +64,7 @@ router.get('/financials/closers', getCloserStats);
 router.get('/users', getAdminUsers);
 router.get('/users/:userId/details', getAdminUserDetails);
 router.put('/users/:userId/grant-lifetime', grantLifetimeAccess);
-router.post('/users/create-lifetime', createLifetimeUser);
+router.post('/users/create', createUser);
 
 router.put('/users/:userId/subscription', updateUserSubscription); // Manual edit
 router.post('/users/:userId/sync-subscription', syncStripeSubscription); // Sync from Stripe ID

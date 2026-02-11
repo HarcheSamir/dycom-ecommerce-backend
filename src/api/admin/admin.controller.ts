@@ -1339,11 +1339,16 @@ export const getAdminUnreadCounts = async (req: Request, res: Response) => {
  * - If user exists: Upgrade to LIFETIME + send purchase email
  * - If new: Create user + generate token + send welcome email (password setup)
  */
-export const createLifetimeUser = async (req: Request, res: Response) => {
-    const { email, firstName, lastName } = req.body;
+/**
+ * Manually create a user with specified status (LIFETIME_ACCESS or ACTIVE).
+ * - If user exists: Upgrade/Update status + send email
+ * - If new: Create user + generate token + send welcome email (password setup)
+ */
+export const createUser = async (req: Request, res: Response) => {
+    const { email, firstName, lastName, status, installmentsPaid, installmentsRequired, stripeSubscriptionId, stripePaymentId } = req.body;
 
-    if (!email || !firstName || !lastName) {
-        return res.status(400).json({ error: 'Email, First Name, and Last Name are required.' });
+    if (!email || !firstName || !lastName || !status) {
+        return res.status(400).json({ error: 'Email, First Name, Last Name, and Status are required.' });
     }
 
     try {
@@ -1351,11 +1356,42 @@ export const createLifetimeUser = async (req: Request, res: Response) => {
         let user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
         let isNewUser = false;
 
-        // Generate a fake transaction code for internal tracking
+        // Valid statuses for this manual creation
+        const validStatuses = ['LIFETIME', 'ACTIVE'];
+        if (!validStatuses.includes(status)) {
+            return res.status(400).json({ error: 'Status must be either LIFETIME or ACTIVE.' });
+        }
+
+        const targetStatus = status === 'LIFETIME' ? SubscriptionStatus.LIFETIME_ACCESS : SubscriptionStatus.ACTIVE;
+
+        // Prepare data based on status
+        let subData: any = {};
+        if (targetStatus === SubscriptionStatus.LIFETIME_ACCESS) {
+            subData = {
+                subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS,
+                installmentsPaid: 1,
+                installmentsRequired: 1,
+                stripeSubscriptionId: null, // No recurring sub for lifetime
+                currentPeriodEnd: null
+            };
+        } else {
+            // ACTIVE
+            subData = {
+                subscriptionStatus: SubscriptionStatus.ACTIVE,
+                installmentsPaid: Number(installmentsPaid) || 0,
+                installmentsRequired: Number(installmentsRequired) || 1,
+                stripeSubscriptionId: stripeSubscriptionId || null,
+                // We don't set currentPeriodEnd automatically unless we fetch from Stripe, 
+                // but for now let's leave it null or maybe we should fetch it if ID is present.
+                // The sync endpoint handles that, let's keep it simple here.
+            };
+        }
+
+        // Generate a fake transaction code/id for internal tracking if needed
         const transactionCode = `MANUAL_ADMIN_${Date.now()}`;
 
         if (!user) {
-            console.log(`👤 Admin creating new LIFETIME user: ${normalizedEmail}`);
+            console.log(`👤 Admin creating new ${status} user: ${normalizedEmail}`);
             isNewUser = true;
 
             // Generate random password (placeholder)
@@ -1372,10 +1408,8 @@ export const createLifetimeUser = async (req: Request, res: Response) => {
                     firstName: firstName.trim(),
                     lastName: lastName.trim(),
                     accountType: 'USER',
-                    status: 'ACTIVE',
-                    subscriptionStatus: 'LIFETIME_ACCESS',
-                    installmentsPaid: 1,
-                    installmentsRequired: 1,
+                    status: 'ACTIVE', // Account is active
+                    ...subData,
                     hotmartTransactionCode: transactionCode,
                     accountSetupToken: accountSetupToken,
                     availableCourseDiscounts: 0
@@ -1386,47 +1420,92 @@ export const createLifetimeUser = async (req: Request, res: Response) => {
             await sendWelcomeWithPasswordSetup(normalizedEmail, firstName, accountSetupToken);
 
         } else {
-            console.log(`👤 Admin upgrading existing user to LIFETIME: ${user.id}`);
+            console.log(`👤 Admin updating existing user to ${status}: ${user.id}`);
 
             await prisma.user.update({
                 where: { id: user.id },
                 data: {
-                    subscriptionStatus: 'LIFETIME_ACCESS',
-                    installmentsPaid: 1,
-                    installmentsRequired: 1,
+                    ...subData,
                     hotmartTransactionCode: transactionCode
                 }
             });
 
-            // Send purchase confirmation email for existing users
+            // Send purchase confirmation email for existing users (only if upgrades to Lifetime? Or potentially for manual active too?)
+            // For now, let's allow it for both as a "Access Granted" type email.
+            // Using a generic "Access Granted" or similar.
+            // The existing function is specifically named "sendPurchaseConfirmationEmail".
             await sendPurchaseConfirmationEmail(
                 normalizedEmail,
                 user.firstName,
-                "Dycom Academie (Lifetime Access - Admin Grant)",
+                `Dycom Academie (${status === 'LIFETIME' ? 'Lifetime Access' : 'Premium Access'} - Admin Grant)`,
                 0,
                 "EUR",
                 null
             );
         }
 
-        // Log Transaction for records
-        await prisma.transaction.create({
-            data: {
-                userId: user.id,
-                amount: 0,
-                currency: 'EUR',
-                status: 'succeeded',
-                hotmartTransactionCode: transactionCode
+        // --- Handle Transaction Recording ---
+        // 1. If Stripe Payment ID provided, fetch real data
+        if (stripePaymentId) {
+            try {
+                const paymentIntent = await stripe.paymentIntents.retrieve(stripePaymentId);
+                if (paymentIntent.status === 'succeeded') {
+                    // Check existing
+                    const existingTx = await prisma.transaction.findFirst({ where: { stripePaymentId } });
+                    if (!existingTx) {
+                        await prisma.transaction.create({
+                            data: {
+                                userId: user.id,
+                                stripePaymentId: paymentIntent.id,
+                                amount: paymentIntent.amount / 100,
+                                currency: paymentIntent.currency,
+                                status: 'succeeded',
+                                createdAt: new Date(paymentIntent.created * 1000)
+                            }
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch/record stripe payment during create user:", e);
             }
-        });
+        } else {
+            // 2. Fallback: Log a 0 EUR manual transaction just for record keeping
+            await prisma.transaction.create({
+                data: {
+                    userId: user.id,
+                    amount: 0,
+                    currency: 'EUR',
+                    status: 'succeeded',
+                    hotmartTransactionCode: transactionCode
+                }
+            });
+        }
+
+        // If Stripe Subscription ID provided, try to sync period end
+        if (stripeSubscriptionId) {
+            try {
+                const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId) as any;
+                if (sub) {
+                    await prisma.user.update({
+                        where: { id: user.id },
+                        data: {
+                            currentPeriodEnd: new Date(sub.current_period_end * 1000),
+                            stripeCustomerId: sub.customer as string
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn("Failed to sync subscription details during creation:", e);
+            }
+        }
 
         res.status(200).json({
-            message: isNewUser ? 'User created and invited successfully.' : 'User upgraded successfully.',
+            message: isNewUser ? 'User created and invited successfully.' : 'User updated successfully.',
             user
         });
 
     } catch (error) {
-        console.error('Error creating lifetime user:', error);
+        console.error('Error creating/updating user:', error);
         res.status(500).json({ error: 'Failed to create user.' });
     }
 };
