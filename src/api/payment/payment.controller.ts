@@ -1,6 +1,6 @@
 // src/api/payment/payment.controller.ts
 
-import { Response ,Request} from "express";
+import { Response, Request } from "express";
 import { PrismaClient } from "@prisma/client";
 import Stripe from "stripe";
 import { AuthenticatedRequest } from "../../utils/AuthRequestType";
@@ -379,18 +379,26 @@ export const paymentController = {
       res.status(500).json({ error: error.message });
     }
   },
-async getHotmartPrice(req: Request, res: Response) {
-  try {
-    const priceData = await getProductPrice();
+  async getHotmartPrice(req: Request, res: Response) {
+    try {
+      const priceData = await getProductPrice();
 
-    if (!priceData) {
-      return res.status(502).json({ error: 'Failed to fetch product price' });
+      if (!priceData) {
+        return res.status(502).json({ error: 'Failed to fetch product price' });
+      }
+
+      return res.json(priceData);
+    } catch (error) {
+      return res.status(500).json({ error: 'Internal server error' });
     }
+  },
 
-    return res.json(priceData);
-  } catch (error) {
-    return res.status(500).json({ error: 'Internal server error' });
+  async getHotmartCourseUrl(req: Request, res: Response) {
+    const url = process.env.HOTMART_COURSE_PAYMENT_URL;
+    if (!url) {
+      return res.status(404).json({ error: 'Hotmart course payment URL not configured.' });
+    }
+    return res.json({ url });
   }
-}
 
 };

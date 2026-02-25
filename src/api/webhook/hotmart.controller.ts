@@ -16,6 +16,9 @@ const SHOP_ORDER_PRODUCT_IDS = [
     process.env.HOTMART_SHOP_TIER2_PRODUCT_ID   // Pack Pro (4-10 products) - 599€
 ].filter(Boolean);
 
+// Course Product ID - for paid course purchases via Hotmart
+const COURSE_PRODUCT_ID = process.env.HOTMART_COURSE_PRODUCT_ID;
+
 export const hotmartController = {
     async handleWebhook(req: Request, res: Response) {
         // Hotmart v2 sends the token in header 'x-hotmart-hottok' or body 'hottok'
@@ -30,15 +33,18 @@ export const hotmartController = {
         console.log(`🔥 Hotmart Event: ${event}`);
 
         try {
-            // Check if this is a shop order payment
+            // Check what type of product this is
             const productId = data?.product?.id?.toString();
             const isShopOrderPayment = productId && SHOP_ORDER_PRODUCT_IDS.includes(productId);
+            const isCoursePurchase = productId && COURSE_PRODUCT_ID && productId === COURSE_PRODUCT_ID;
 
             switch (event) {
                 case 'PURCHASE_APPROVED':
                 case 'PURCHASE_COMPLETE':
                     if (isShopOrderPayment) {
                         await handleShopOrderPayment(data);
+                    } else if (isCoursePurchase) {
+                        await handleCoursePurchase(data);
                     } else {
                         await handleApprovedPurchase(data);
                     }
@@ -46,9 +52,11 @@ export const hotmartController = {
 
                 case 'PURCHASE_REFUNDED':
                 case 'PURCHASE_CHARGEBACK':
-                case 'PURCHASE_CANCELED': // Added based on your logs
+                case 'PURCHASE_CANCELED':
                     if (isShopOrderPayment) {
                         await handleShopOrderRefund(data);
+                    } else if (isCoursePurchase) {
+                        await handleCourseRefund(data);
                     } else {
                         await handleRevokeAccess(data);
                     }
@@ -290,10 +298,113 @@ async function handleRevokeAccess(data: any) {
         where: { email },
         data: {
             subscriptionStatus: 'CANCELED',
-            // status: 'INACTIVE' // Optional: fully lock account
         }
     });
+}
 
-    // Update local transaction status if you want to track refunds
-    // Not strictly necessary for access control but good for analytics
+/**
+ * Handle paid course purchase via Hotmart.
+ * Extracts courseId from the sck tracking parameter (format: COURSE_{courseId})
+ */
+async function handleCoursePurchase(data: any) {
+    const buyer = data.buyer;
+    const purchase = data.purchase;
+    const transactionCode = purchase.transaction;
+    const email = buyer.email;
+    const amount = purchase.price.value;
+    const currency = purchase.price.currency_value;
+
+    // Extract courseId from sck tracking param (format: COURSE_{courseId})
+    const sck = purchase.tracking?.source_sck || '';
+    const courseId = sck.startsWith('COURSE_') ? sck.replace('COURSE_', '') : null;
+
+    console.log(`📚 Processing Course Purchase: ${email} (${transactionCode}) — courseId: ${courseId}`);
+
+    if (!courseId) {
+        console.error('❌ No courseId found in sck tracking parameter:', sck);
+        return;
+    }
+
+    // 1. Find the user
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+        console.error(`❌ No user found for course purchase: ${email}`);
+        return;
+    }
+
+    // 2. Verify the course exists
+    const course = await prisma.videoCourse.findUnique({ where: { id: courseId } });
+    if (!course) {
+        console.error(`❌ Course not found: ${courseId}`);
+        return;
+    }
+
+    // 3. Create CoursePurchase (idempotent — upsert to avoid duplicates)
+    await prisma.coursePurchase.upsert({
+        where: {
+            userId_courseId: { userId: user.id, courseId }
+        },
+        create: {
+            userId: user.id,
+            courseId,
+            purchasePrice: amount
+        },
+        update: {} // Already purchased, do nothing
+    });
+
+    // 4. Log Transaction (idempotent check)
+    const existingTx = await prisma.transaction.findFirst({
+        where: { hotmartTransactionCode: transactionCode }
+    });
+
+    if (!existingTx) {
+        await prisma.transaction.create({
+            data: {
+                userId: user.id,
+                amount,
+                currency,
+                status: 'succeeded',
+                hotmartTransactionCode: transactionCode
+            }
+        });
+    }
+
+    console.log(`✅ Course ${course.title} unlocked for user ${user.email}`);
+
+    // 5. Send confirmation email
+    await sendPurchaseConfirmationEmail(
+        email,
+        user.firstName,
+        course.title,
+        amount,
+        currency,
+        null
+    );
+}
+
+/**
+ * Handle course purchase refund — removes the CoursePurchase record
+ */
+async function handleCourseRefund(data: any) {
+    const email = data.buyer.email;
+    const transactionCode = data.purchase.transaction;
+    const sck = data.purchase.tracking?.source_sck || '';
+    const courseId = sck.startsWith('COURSE_') ? sck.replace('COURSE_', '') : null;
+
+    console.log(`⚠️ Processing course refund: ${email} (${transactionCode})`);
+
+    if (!courseId) {
+        console.error('❌ No courseId in sck for refund:', sck);
+        return;
+    }
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) return;
+
+    // Remove course access
+    await prisma.coursePurchase.deleteMany({
+        where: { userId: user.id, courseId }
+    });
+
+    console.log(`✅ Course access revoked for ${email} — course ${courseId}`);
 }
