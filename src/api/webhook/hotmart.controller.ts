@@ -18,6 +18,10 @@ const SHOP_ORDER_PRODUCT_IDS = [
 
 // Course Product ID - for paid course purchases via Hotmart
 const COURSE_PRODUCT_ID = process.env.HOTMART_COURSE_PRODUCT_ID;
+// Direct mapping: this Hotmart product unlocks this specific course
+const HOTMART_COURSE_ID = process.env.HOTMART_COURSE_ID;
+// Fallback course ID - if sck tracking is missing, use this course UUID directly
+const FALLBACK_COURSE_ID = process.env.HOTMART_COURSE_ID;
 
 export const hotmartController = {
     async handleWebhook(req: Request, res: Response) {
@@ -304,7 +308,7 @@ async function handleRevokeAccess(data: any) {
 
 /**
  * Handle paid course purchase via Hotmart.
- * Extracts courseId from the sck tracking parameter (format: COURSE_{courseId})
+ * Uses direct mapping: HOTMART_COURSE_PRODUCT_ID → HOTMART_COURSE_ID
  */
 async function handleCoursePurchase(data: any) {
     const buyer = data.buyer;
@@ -314,14 +318,13 @@ async function handleCoursePurchase(data: any) {
     const amount = purchase.price.value;
     const currency = purchase.price.currency_value;
 
-    // Extract courseId from sck tracking param (format: COURSE_{courseId})
-    const sck = purchase.tracking?.source_sck || '';
-    const courseId = sck.startsWith('COURSE_') ? sck.replace('COURSE_', '') : null;
+    // Use direct env var mapping — one product = one course
+    const courseId = HOTMART_COURSE_ID;
 
     console.log(`📚 Processing Course Purchase: ${email} (${transactionCode}) — courseId: ${courseId}`);
 
     if (!courseId) {
-        console.error('❌ No courseId found in sck tracking parameter:', sck);
+        console.error('❌ HOTMART_COURSE_ID env var is not set!');
         return;
     }
 
@@ -388,13 +391,12 @@ async function handleCoursePurchase(data: any) {
 async function handleCourseRefund(data: any) {
     const email = data.buyer.email;
     const transactionCode = data.purchase.transaction;
-    const sck = data.purchase.tracking?.source_sck || '';
-    const courseId = sck.startsWith('COURSE_') ? sck.replace('COURSE_', '') : null;
+    const courseId = HOTMART_COURSE_ID;
 
     console.log(`⚠️ Processing course refund: ${email} (${transactionCode})`);
 
     if (!courseId) {
-        console.error('❌ No courseId in sck for refund:', sck);
+        console.error('❌ HOTMART_COURSE_ID env var is not set for refund!');
         return;
     }
 
