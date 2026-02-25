@@ -184,7 +184,8 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
     const hasPurchased = (user.coursePurchases?.length ?? 0) > 0;
     const isGlobalFree = (course.priceEur === null || course.priceEur === 0) && (course.priceUsd === null || course.priceUsd === 0);
 
-    const hasAccess = isAdmin || isSubscriber || hasPurchased || isGlobalFree;
+    // Paid courses require explicit purchase — subscribers only get free courses automatically
+    const hasAccess = isAdmin || hasPurchased || (isGlobalFree && isSubscriber) || isGlobalFree;
 
     if (!hasAccess) {
       return res.status(403).json({ error: 'Access denied.' });
