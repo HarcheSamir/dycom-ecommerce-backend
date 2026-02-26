@@ -335,6 +335,7 @@ enum SubscriptionStatus {
   CANCELED
   INCOMPLETE
   LIFETIME_ACCESS
+  SMMA_ONLY
 }
 
 enum UserStatus {

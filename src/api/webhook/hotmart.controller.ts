@@ -309,12 +309,15 @@ async function handleRevokeAccess(data: any) {
 /**
  * Handle paid course purchase via Hotmart.
  * Uses direct mapping: HOTMART_COURSE_PRODUCT_ID → HOTMART_COURSE_ID
+ * If user doesn't exist (new signup via SMMA), creates account with no academy access.
  */
 async function handleCoursePurchase(data: any) {
     const buyer = data.buyer;
     const purchase = data.purchase;
     const transactionCode = purchase.transaction;
     const email = buyer.email;
+    const name = buyer.name || 'Member';
+    const phone = buyer.checkout_phone || null;
     const amount = purchase.price.value;
     const currency = purchase.price.currency_value;
 
@@ -328,11 +331,43 @@ async function handleCoursePurchase(data: any) {
         return;
     }
 
-    // 1. Find the user
-    const user = await prisma.user.findUnique({ where: { email } });
+    // 1. Find or create the user
+    let user = await prisma.user.findUnique({ where: { email } });
+    let isNewUser = false;
+
     if (!user) {
-        console.error(`❌ No user found for course purchase: ${email}`);
-        return;
+        console.log(`👤 Creating new SMMA-only user: ${email}`);
+        isNewUser = true;
+
+        const tempPassword = crypto.randomBytes(16).toString('hex');
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
+        const accountSetupToken = crypto.randomBytes(32).toString('hex');
+
+        const nameParts = name.split(' ');
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(' ') || 'User';
+
+        user = await prisma.user.create({
+            data: {
+                email,
+                password: hashedPassword,
+                firstName,
+                lastName,
+                phone,
+                accountType: 'USER',
+                status: 'ACTIVE',
+                // NO academy access — only course purchase grants SMMA access
+                subscriptionStatus: 'SMMA_ONLY',
+                installmentsPaid: 0,
+                installmentsRequired: 0,
+                hotmartTransactionCode: transactionCode,
+                accountSetupToken: accountSetupToken,
+                availableCourseDiscounts: 0
+            }
+        });
+
+        // Send welcome email with password setup link
+        await sendWelcomeWithPasswordSetup(email, firstName, accountSetupToken);
     }
 
     // 2. Verify the course exists
@@ -372,17 +407,19 @@ async function handleCoursePurchase(data: any) {
         });
     }
 
-    console.log(`✅ Course ${course.title} unlocked for user ${user.email}`);
+    console.log(`✅ Course ${course.title} unlocked for user ${user.email} (new user: ${isNewUser})`);
 
-    // 5. Send confirmation email
-    await sendPurchaseConfirmationEmail(
-        email,
-        user.firstName,
-        course.title,
-        amount,
-        currency,
-        null
-    );
+    // 5. Send confirmation email (only for existing users — new users already got the welcome email)
+    if (!isNewUser) {
+        await sendPurchaseConfirmationEmail(
+            email,
+            user.firstName,
+            course.title,
+            amount,
+            currency,
+            null
+        );
+    }
 }
 
 /**

@@ -1357,12 +1357,16 @@ export const createUser = async (req: Request, res: Response) => {
         let isNewUser = false;
 
         // Valid statuses for this manual creation
-        const validStatuses = ['LIFETIME', 'ACTIVE'];
+        const validStatuses = ['LIFETIME', 'ACTIVE', 'SMMA'];
         if (!validStatuses.includes(status)) {
-            return res.status(400).json({ error: 'Status must be either LIFETIME or ACTIVE.' });
+            return res.status(400).json({ error: 'Status must be LIFETIME, ACTIVE, or SMMA.' });
         }
 
-        const targetStatus = status === 'LIFETIME' ? SubscriptionStatus.LIFETIME_ACCESS : SubscriptionStatus.ACTIVE;
+        const targetStatus = status === 'LIFETIME'
+            ? SubscriptionStatus.LIFETIME_ACCESS
+            : status === 'SMMA'
+                ? SubscriptionStatus.SMMA_ONLY
+                : SubscriptionStatus.ACTIVE;
 
         // Prepare data based on status
         let subData: any = {};
@@ -1371,7 +1375,15 @@ export const createUser = async (req: Request, res: Response) => {
                 subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS,
                 installmentsPaid: 1,
                 installmentsRequired: 1,
-                stripeSubscriptionId: null, // No recurring sub for lifetime
+                stripeSubscriptionId: null,
+                currentPeriodEnd: null
+            };
+        } else if (targetStatus === SubscriptionStatus.SMMA_ONLY) {
+            subData = {
+                subscriptionStatus: SubscriptionStatus.SMMA_ONLY,
+                installmentsPaid: 0,
+                installmentsRequired: 0,
+                stripeSubscriptionId: null,
                 currentPeriodEnd: null
             };
         } else {
@@ -1381,9 +1393,6 @@ export const createUser = async (req: Request, res: Response) => {
                 installmentsPaid: Number(installmentsPaid) || 0,
                 installmentsRequired: Number(installmentsRequired) || 1,
                 stripeSubscriptionId: stripeSubscriptionId || null,
-                // We don't set currentPeriodEnd automatically unless we fetch from Stripe, 
-                // but for now let's leave it null or maybe we should fetch it if ID is present.
-                // The sync endpoint handles that, let's keep it simple here.
             };
         }
 
@@ -1430,18 +1439,35 @@ export const createUser = async (req: Request, res: Response) => {
                 }
             });
 
-            // Send purchase confirmation email for existing users (only if upgrades to Lifetime? Or potentially for manual active too?)
-            // For now, let's allow it for both as a "Access Granted" type email.
-            // Using a generic "Access Granted" or similar.
-            // The existing function is specifically named "sendPurchaseConfirmationEmail".
+            const productName = status === 'LIFETIME'
+                ? 'Lifetime Access'
+                : status === 'SMMA'
+                    ? 'Formation SMMA'
+                    : 'Premium Access';
+
             await sendPurchaseConfirmationEmail(
                 normalizedEmail,
                 user.firstName,
-                `Dycom Academie (${status === 'LIFETIME' ? 'Lifetime Access' : 'Premium Access'} - Admin Grant)`,
+                `Dycom Academie (${productName} - Admin Grant)`,
                 0,
                 "EUR",
                 null
             );
+        }
+
+        // --- Handle SMMA CoursePurchase record ---
+        if (status === 'SMMA') {
+            const courseId = process.env.HOTMART_COURSE_ID;
+            if (courseId) {
+                await prisma.coursePurchase.upsert({
+                    where: { userId_courseId: { userId: user.id, courseId } },
+                    create: { userId: user.id, courseId, purchasePrice: 0 },
+                    update: {}
+                });
+                console.log(`📚 Admin granted SMMA course access to ${normalizedEmail}`);
+            } else {
+                console.warn('⚠️ HOTMART_COURSE_ID not set — skipped CoursePurchase creation');
+            }
         }
 
         // --- Handle Transaction Recording ---
