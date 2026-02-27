@@ -21,7 +21,9 @@ export const hasMembershipMiddleware = async (req: AuthenticatedRequest, res: Re
             stripeSubscriptionId: true,
             currentPeriodEnd: true,
             email: true,
-            firstName: true
+            firstName: true,
+            installmentsPaid: true,
+            installmentsRequired: true
         }
     });
 
@@ -42,11 +44,13 @@ export const hasMembershipMiddleware = async (req: AuthenticatedRequest, res: Re
 
     // Expiry check for non-Stripe ACTIVE/SMMA users (admin-created with manual installments)
     // If they have a currentPeriodEnd set and it has passed, auto-downgrade to PAST_DUE
+    // EXCEPTION: If they have paid all their required installments, they never expire (Lifetime).
     if (
         (user.subscriptionStatus === 'ACTIVE' || user.subscriptionStatus === 'SMMA_ONLY') &&
         !user.stripeSubscriptionId &&
         user.currentPeriodEnd &&
-        new Date() > new Date(user.currentPeriodEnd)
+        new Date() > new Date(user.currentPeriodEnd) &&
+        (user.installmentsRequired > 0 && user.installmentsPaid < user.installmentsRequired)
     ) {
         // Auto-downgrade to PAST_DUE
         await prisma.user.update({
