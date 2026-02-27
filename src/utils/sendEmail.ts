@@ -577,6 +577,92 @@ export const sendPaymentFailedAlertToAdmins = async (
 };
 
 /**
+ * Sends an email to a user when their installment period has expired.
+ * Their access has been suspended until they pay the next installment.
+ */
+export const sendInstallmentExpiredEmail = async (
+  email: string,
+  firstName: string
+) => {
+  const billingLink = `${FRONTEND_URL}/dashboard/billing`;
+  const supportLink = `${FRONTEND_URL}/dashboard/support`;
+
+  try {
+    const response = await resend.emails.send({
+      from: 'Dycom Club <noreply@dycom-club.com>',
+      to: [email],
+      subject: '⚠️ Votre accès a été suspendu - Paiement en retard',
+      html: `
+        <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; background-color: #f9fafb;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            
+            <!-- Header -->
+            <div style="background-color: #111317; padding: 30px; text-align: center;">
+               <h2 style="color: #ffffff; margin: 0;">Dycom Club</h2>
+            </div>
+
+            <!-- Body -->
+            <div style="padding: 30px;">
+              <div style="text-align: center; margin-bottom: 25px;">
+                <div style="display: inline-block; background-color: #FEF2F2; border-radius: 50%; padding: 15px; margin-bottom: 15px;">
+                  <span style="font-size: 32px;">⚠️</span>
+                </div>
+                <h2 style="color: #DC2626; margin: 0;">Paiement en retard</h2>
+              </div>
+
+              <p style="font-size: 16px; line-height: 1.6; color: #4b5563;">
+                Bonjour ${firstName},
+              </p>
+              <p style="font-size: 16px; line-height: 1.6; color: #4b5563;">
+                Votre période d'abonnement est arrivée à expiration et votre accès à Dycom Club a été temporairement suspendu.
+              </p>
+              <p style="font-size: 16px; line-height: 1.6; color: #4b5563;">
+                Pour restaurer votre accès, veuillez procéder au paiement de votre prochaine mensualité.
+              </p>
+
+              <!-- Alert Box -->
+              <div style="background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 20px; margin: 25px 0; text-align: center;">
+                <p style="color: #DC2626; font-weight: bold; margin: 0;">
+                  Votre accès est suspendu jusqu'au prochain paiement.
+                </p>
+              </div>
+
+              <!-- CTA -->
+              <div style="text-align: center; margin-top: 30px; margin-bottom: 15px;">
+                <a href="${billingLink}" style="background-color: #7F56D9; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">
+                  Voir ma facturation
+                </a>
+              </div>
+              <div style="text-align: center; margin-bottom: 30px;">
+                <a href="${supportLink}" style="color: #7F56D9; text-decoration: underline; font-size: 14px;">
+                  Contacter le support
+                </a>
+              </div>
+              
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;" />
+              
+              <p style="font-size: 14px; color: #9ca3af; text-align: center;">
+                Si vous avez déjà effectué le paiement, veuillez contacter notre support pour résoudre ce problème.
+              </p>
+            </div>
+          </div>
+        </div>
+      `
+    });
+
+    if (response.error) {
+      console.error('Resend Error (Installment Expired):', response.error);
+      return { success: false, error: response.error };
+    }
+    console.log(`⚠️ Installment expired email sent to ${email}`);
+    return { success: true, id: response.data?.id };
+  } catch (error) {
+    console.error('Resend Execution Error (Installment Expired):', error);
+    return { success: false, error };
+  }
+};
+
+/**
  * Sends an alert to Admins when a new user signs up.
  */
 export const sendNewUserSignupAlertToAdmins = async (

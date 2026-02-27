@@ -989,6 +989,7 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
                 installmentsRequired: user.installmentsRequired,
                 stripeCustomerId: user.stripeCustomerId,
                 stripeSubscriptionId: user.stripeSubscriptionId,
+                currentPeriodEnd: user.currentPeriodEnd,
             },
             financials: {
                 ltv: user.transactions.filter((t: any) => t.status === 'succeeded').reduce((acc: number, curr: any) => acc + curr.amount, 0),
@@ -1020,19 +1021,73 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
 
 /**
  * @description Manually update user subscription fields (Status, Installments).
+ * Auto-extends currentPeriodEnd by 30 days when installmentsPaid increases.
+ * Auto-upgrades to LIFETIME_ACCESS when installmentsPaid >= installmentsRequired.
  */
 export const updateUserSubscription = async (req: Request, res: Response) => {
     const { userId } = req.params;
-    const { subscriptionStatus, installmentsPaid, installmentsRequired } = req.body;
+    const { subscriptionStatus, installmentsPaid, installmentsRequired, currentPeriodEnd } = req.body;
 
     try {
+        const newPaid = Number(installmentsPaid);
+        const newRequired = Number(installmentsRequired);
+
+        // Fetch the current user to detect installment changes
+        const currentUser = await prisma.user.findUnique({
+            where: { id: userId as string },
+            select: { installmentsPaid: true, stripeSubscriptionId: true, subscriptionStatus: true }
+        });
+
+        if (!currentUser) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        // Check if all installments are now complete → auto-upgrade to LIFETIME
+        if (newPaid >= newRequired && newRequired > 0) {
+            const updatedUser = await prisma.user.update({
+                where: { id: userId as string },
+                data: {
+                    subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS,
+                    installmentsPaid: newPaid,
+                    installmentsRequired: newRequired,
+                    currentPeriodEnd: null, // No expiry for lifetime
+                    stripeSubscriptionId: null
+                }
+            });
+            console.log(`✅ User ${userId} auto-upgraded to LIFETIME_ACCESS (${newPaid}/${newRequired} installments paid)`);
+            return res.status(200).json(updatedUser);
+        }
+
+        // Build the update data
+        const updateData: any = {
+            subscriptionStatus: subscriptionStatus as SubscriptionStatus,
+            installmentsPaid: newPaid,
+            installmentsRequired: newRequired
+        };
+
+        // If explicitly requested by Admin UI, override the date directly
+        if (currentPeriodEnd !== undefined) {
+            updateData.currentPeriodEnd = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+            console.log(`📅 Admin manually set currentPeriodEnd to ${currentPeriodEnd} for user ${userId}`);
+
+            // Auto-restore to ACTIVE or SMMA_ONLY if they were PAST_DUE but now have a valid date
+            if (updateData.currentPeriodEnd && updateData.currentPeriodEnd > new Date() && currentUser.subscriptionStatus === 'PAST_DUE') {
+                updateData.subscriptionStatus = (subscriptionStatus as SubscriptionStatus) === SubscriptionStatus.SMMA_ONLY ? SubscriptionStatus.SMMA_ONLY : SubscriptionStatus.ACTIVE;
+            }
+        }
+        // Otherwise, run the automatic extension logic if they paid an installment manually
+        else if (newPaid > currentUser.installmentsPaid && !currentUser.stripeSubscriptionId) {
+            const newPeriodEnd = new Date();
+            newPeriodEnd.setDate(newPeriodEnd.getDate() + 30);
+            updateData.currentPeriodEnd = newPeriodEnd;
+            // If user was PAST_DUE, restore to their intended tier
+            updateData.subscriptionStatus = (subscriptionStatus as SubscriptionStatus) === SubscriptionStatus.SMMA_ONLY ? SubscriptionStatus.SMMA_ONLY : SubscriptionStatus.ACTIVE;
+            console.log(`📅 Auto-extended currentPeriodEnd to ${newPeriodEnd.toISOString()} for user ${userId}`);
+        }
+
         const updatedUser = await prisma.user.update({
             where: { id: userId as string },
-            data: {
-                subscriptionStatus: subscriptionStatus as SubscriptionStatus,
-                installmentsPaid: Number(installmentsPaid),
-                installmentsRequired: Number(installmentsRequired)
-            }
+            data: updateData
         });
         res.status(200).json(updatedUser);
     } catch (error) {
@@ -1345,7 +1400,7 @@ export const getAdminUnreadCounts = async (req: Request, res: Response) => {
  * - If new: Create user + generate token + send welcome email (password setup)
  */
 export const createUser = async (req: Request, res: Response) => {
-    const { email, firstName, lastName, status, installmentsPaid, installmentsRequired, stripeSubscriptionId, stripePaymentId } = req.body;
+    const { email, firstName, lastName, status, installmentsPaid, installmentsRequired, stripeSubscriptionId, stripePaymentId, currentPeriodEnd } = req.body;
 
     if (!email || !firstName || !lastName || !status) {
         return res.status(400).json({ error: 'Email, First Name, Last Name, and Status are required.' });
@@ -1381,18 +1436,19 @@ export const createUser = async (req: Request, res: Response) => {
         } else if (targetStatus === SubscriptionStatus.SMMA_ONLY) {
             subData = {
                 subscriptionStatus: SubscriptionStatus.SMMA_ONLY,
-                installmentsPaid: 0,
-                installmentsRequired: 0,
+                installmentsPaid: Number(installmentsPaid) || 0,
+                installmentsRequired: Number(installmentsRequired) || 1,
                 stripeSubscriptionId: null,
-                currentPeriodEnd: null
+                currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd) : null
             };
         } else {
-            // ACTIVE
+            // ACTIVE — set currentPeriodEnd to provided date or null (permanent)
             subData = {
                 subscriptionStatus: SubscriptionStatus.ACTIVE,
                 installmentsPaid: Number(installmentsPaid) || 0,
                 installmentsRequired: Number(installmentsRequired) || 1,
                 stripeSubscriptionId: stripeSubscriptionId || null,
+                currentPeriodEnd: stripeSubscriptionId ? undefined : (currentPeriodEnd ? new Date(currentPeriodEnd) : null),
             };
         }
 
