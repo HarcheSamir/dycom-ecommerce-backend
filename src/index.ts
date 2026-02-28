@@ -107,7 +107,7 @@ app.use('/api/resources', resourceRoutes);
 app.use('/api/shop-orders', authMiddleware, shopOrderRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/academy-agent', authMiddleware, academyAgentRoutes);
-app.use('/api/discord', authMiddleware, discordRoutes);
+app.use('/api/discord', authMiddleware, hasMembershipMiddleware, discordRoutes);
 
 
 
