@@ -3,7 +3,8 @@ import { prisma } from './../../index';
 import bcrypt from 'bcrypt';
 import { AuthenticatedRequest } from '../../utils/AuthRequestType';
 import Stripe from "stripe";
-import { SubscriptionStatus } from '@prisma/client'; // Import Enum
+import { SubscriptionStatus } from '@prisma/client';
+import { syncDiscordMembership } from '../../utils/discord';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -64,6 +65,14 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
 
     if (!userProfile) {
       return res.status(404).json({ error: 'User not found.' });
+    }
+
+    // Sync Discord membership — if user left the server, clear their link
+    if (userProfile.discordId) {
+      const stillInGuild = await syncDiscordMembership(userId, userProfile.discordId);
+      if (!stillInGuild) {
+        (userProfile as any).discordId = null;
+      }
     }
 
     let isCancellationScheduled = false;

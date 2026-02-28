@@ -97,3 +97,39 @@ export async function handleSubscriptionChange(userId: string, newStatus: string
         console.error(`[Discord] Error handling subscription change for user ${userId}:`, error);
     }
 }
+
+/**
+ * Check if a user is still a member of the Discord guild.
+ * If they left manually, clear their discordId and token from the DB.
+ * Fire-and-forget — errors are silently logged.
+ */
+export async function syncDiscordMembership(userId: string, discordId: string): Promise<boolean> {
+    try {
+        const res = await fetch(`${DISCORD_API}/guilds/${DISCORD_GUILD_ID}/members/${discordId}`, {
+            headers: {
+                'Authorization': `Bot ${DISCORD_BOT_TOKEN}`,
+            },
+        });
+
+        if (res.ok) {
+            return true; // Still in the guild
+        }
+
+        if (res.status === 404) {
+            // User left the server — clear their Discord link
+            console.log(`[Discord] User ${userId} (${discordId}) is no longer in the guild, clearing link...`);
+            await prisma.user.update({
+                where: { id: userId },
+                data: { discordId: null, discordAccessToken: null },
+            });
+            return false;
+        }
+
+        // Other errors (rate limit, etc.) — don't clear, just log
+        console.warn(`[Discord] Guild membership check for ${discordId} returned ${res.status}`);
+        return true; // Assume still connected to avoid false unlinks
+    } catch (error) {
+        console.error(`[Discord] Error checking guild membership for ${discordId}:`, error);
+        return true; // Assume still connected on network errors
+    }
+}
