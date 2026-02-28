@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import Stripe from "stripe";
 import { sendPurchaseConfirmationEmail } from "../../utils/sendEmail";
+import { handleSubscriptionChange } from "../../utils/discord";
 
 const prisma = new PrismaClient();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
@@ -39,41 +40,41 @@ export const webhookController = {
         const metadata = paymentIntent.metadata;
 
         if (metadata?.type === 'MEMBERSHIP_FULL' && metadata?.userId) {
-             console.log(`--- Membership Full Payment for User ${metadata.userId} ---`);
-             await prisma.user.update({
-                 where: { id: metadata.userId },
-                 data: {
-                     subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS,
-                     installmentsPaid: 1,
-                     installmentsRequired: 1,
-                     stripeSubscriptionId: null
-                 }
-             });
-             await prisma.transaction.create({
-                data: {
-                    userId: metadata.userId,
-                    amount: paymentIntent.amount / 100.0,
-                    currency: paymentIntent.currency,
-                    status: 'succeeded',
-                    stripeInvoiceId: paymentIntent.id,
-                    stripePaymentId: paymentIntent.id,
-                },
-             });
+          console.log(`--- Membership Full Payment for User ${metadata.userId} ---`);
+          await prisma.user.update({
+            where: { id: metadata.userId },
+            data: {
+              subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS,
+              installmentsPaid: 1,
+              installmentsRequired: 1,
+              stripeSubscriptionId: null
+            }
+          });
+          await prisma.transaction.create({
+            data: {
+              userId: metadata.userId,
+              amount: paymentIntent.amount / 100.0,
+              currency: paymentIntent.currency,
+              status: 'succeeded',
+              stripeInvoiceId: paymentIntent.id,
+              stripePaymentId: paymentIntent.id,
+            },
+          });
 
-             // --- ASYNC EMAIL (Non-blocking) ---
-             prisma.user.findUnique({ where: { id: metadata.userId } })
-               .then(user => {
-                  if (user) {
-                    sendPurchaseConfirmationEmail(
-                        user.email,
-                        user.firstName,
-                        "Lifetime Membership (One-Time)",
-                        paymentIntent.amount / 100.0,
-                        paymentIntent.currency,
-                        null 
-                    ).catch(e => console.error("Email send failed:", e));
-                  }
-               });
+          // --- ASYNC EMAIL (Non-blocking) ---
+          prisma.user.findUnique({ where: { id: metadata.userId } })
+            .then(user => {
+              if (user) {
+                sendPurchaseConfirmationEmail(
+                  user.email,
+                  user.firstName,
+                  "Lifetime Membership (One-Time)",
+                  paymentIntent.amount / 100.0,
+                  paymentIntent.currency,
+                  null
+                ).catch(e => console.error("Email send failed:", e));
+              }
+            });
         }
         else if (metadata?.courseId) {
           const { userId, courseId, purchasePrice } = metadata;
@@ -104,16 +105,16 @@ export const webhookController = {
             prisma.user.findUnique({ where: { id: userId } }),
             prisma.videoCourse.findUnique({ where: { id: courseId }, select: { title: true } })
           ]).then(([user, course]) => {
-             if (user && course) {
-                sendPurchaseConfirmationEmail(
-                    user.email,
-                    user.firstName,
-                    `Course: ${course.title}`,
-                    paymentIntent.amount / 100.0,
-                    paymentIntent.currency,
-                    null
-                ).catch(e => console.error("Email send failed:", e));
-             }
+            if (user && course) {
+              sendPurchaseConfirmationEmail(
+                user.email,
+                user.firstName,
+                `Course: ${course.title}`,
+                paymentIntent.amount / 100.0,
+                paymentIntent.currency,
+                null
+              ).catch(e => console.error("Email send failed:", e));
+            }
           });
         }
         break;
@@ -132,9 +133,9 @@ export const webhookController = {
           break;
         }
 
-        const paymentId = typeof invoice.payment_intent === 'string' 
-            ? invoice.payment_intent 
-            : (invoice.payment_intent as any)?.id;
+        const paymentId = typeof invoice.payment_intent === 'string'
+          ? invoice.payment_intent
+          : (invoice.payment_intent as any)?.id;
 
         // Record Transaction
         await prisma.transaction.create({
@@ -151,9 +152,9 @@ export const webhookController = {
 
         // Increment Installment Count
         const updatedUser = await prisma.user.update({
-            where: { id: user.id },
-            data: { installmentsPaid: { increment: 1 } },
-            select: { id: true, installmentsPaid: true, installmentsRequired: true, subscriptionStatus: true }
+          where: { id: user.id },
+          data: { installmentsPaid: { increment: 1 } },
+          select: { id: true, installmentsPaid: true, installmentsRequired: true, subscriptionStatus: true }
         });
 
         console.log(`--- Installment ${updatedUser.installmentsPaid}/${updatedUser.installmentsRequired} paid by User ${user.id} ---`);
@@ -162,41 +163,41 @@ export const webhookController = {
         // We do NOT await this. It runs in background.
         const installmentLabel = `Membership Installment (${updatedUser.installmentsPaid}/${updatedUser.installmentsRequired})`;
         sendPurchaseConfirmationEmail(
-            user.email,
-            user.firstName,
-            installmentLabel,
-            invoice.amount_paid / 100.0,
-            invoice.currency,
-            invoice.hosted_invoice_url 
+          user.email,
+          user.firstName,
+          installmentLabel,
+          invoice.amount_paid / 100.0,
+          invoice.currency,
+          invoice.hosted_invoice_url
         ).catch(e => console.error("Email send failed:", e));
         // ----------------------------------
 
         // Check for Completion (Lifetime Upgrade)
         if (updatedUser.installmentsPaid >= updatedUser.installmentsRequired && updatedUser.subscriptionStatus !== 'LIFETIME_ACCESS') {
-            console.log(`!!! USER ${user.id} HAS COMPLETED PAYMENTS. UPGRADING TO LIFETIME. !!!`);
-            await prisma.user.update({
-                where: { id: user.id },
-                data: { subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS }
-            });
-            try {
-                await stripe.subscriptions.cancel(invoice.subscription);
-                console.log(`--- Stripe Subscription ${invoice.subscription} cancelled (Goal reached) ---`);
-            } catch (err) {
-                console.error(`Failed to cancel subscription for user ${user.id} after completion:`, err);
-            }
+          console.log(`!!! USER ${user.id} HAS COMPLETED PAYMENTS. UPGRADING TO LIFETIME. !!!`);
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS }
+          });
+          try {
+            await stripe.subscriptions.cancel(invoice.subscription);
+            console.log(`--- Stripe Subscription ${invoice.subscription} cancelled (Goal reached) ---`);
+          } catch (err) {
+            console.error(`Failed to cancel subscription for user ${user.id} after completion:`, err);
+          }
         }
 
         // Affiliate Logic
         if (user.referredById) {
-             const previousTransactions = await prisma.transaction.count({
-                where: { userId: user.id, status: 'succeeded' }
-              });
-              if (previousTransactions <= 1) {
-                   await prisma.user.update({
-                      where: { id: user.referredById },
-                      data: { availableCourseDiscounts: { increment: 1 } }
-                    });
-              }
+          const previousTransactions = await prisma.transaction.count({
+            where: { userId: user.id, status: 'succeeded' }
+          });
+          if (previousTransactions <= 1) {
+            await prisma.user.update({
+              where: { id: user.referredById },
+              data: { availableCourseDiscounts: { increment: 1 } }
+            });
+          }
         }
         break;
       }
@@ -212,16 +213,16 @@ export const webhookController = {
 
         // CHECK 1: LIFETIME PROTECTION
         if (user.subscriptionStatus === SubscriptionStatus.LIFETIME_ACCESS) {
-             console.log(`Ignored update for Lifetime User ${user.id}`);
-             break;
+          console.log(`Ignored update for Lifetime User ${user.id}`);
+          break;
         }
 
         // CHECK 2: STALE WEBHOOK PROTECTION (THE FIX)
         if (event.type === 'customer.subscription.updated' &&
-            user.stripeSubscriptionId &&
-            user.stripeSubscriptionId !== subscription.id) {
-            console.log(`⚠️ Ignored stale update for old subscription ${subscription.id}. User is already on ${user.stripeSubscriptionId}`);
-            break;
+          user.stripeSubscriptionId &&
+          user.stripeSubscriptionId !== subscription.id) {
+          console.log(`⚠️ Ignored stale update for old subscription ${subscription.id}. User is already on ${user.stripeSubscriptionId}`);
+          break;
         }
 
         const subscriptionStatus = mapStripeStatusToPrismaStatus(subscription.status);
@@ -236,6 +237,9 @@ export const webhookController = {
             currentPeriodEnd: periodEnd,
           },
         });
+
+        // Fire-and-forget: kick from Discord if no longer active
+        handleSubscriptionChange(user.id, subscriptionStatus).catch(console.error);
         break;
       }
 
@@ -249,13 +253,13 @@ export const webhookController = {
 
         // CHECK 1: LIFETIME PROTECTION
         if (user.subscriptionStatus === SubscriptionStatus.LIFETIME_ACCESS) {
-            break;
+          break;
         }
 
         // CHECK 2: STALE WEBHOOK PROTECTION (THE FIX)
         if (user.stripeSubscriptionId && user.stripeSubscriptionId !== subscription.id) {
-             console.log(`⚠️ Ignored deletion of old subscription ${subscription.id}. User is currently on ${user.stripeSubscriptionId}`);
-             break;
+          console.log(`⚠️ Ignored deletion of old subscription ${subscription.id}. User is currently on ${user.stripeSubscriptionId}`);
+          break;
         }
 
         // Otherwise, it was a real cancellation
@@ -267,6 +271,9 @@ export const webhookController = {
           },
         });
         console.log(`--- Subscription ${subscription.id} was deleted/canceled (User quit) ---`);
+
+        // Fire-and-forget: kick from Discord
+        handleSubscriptionChange(user.id, 'CANCELED').catch(console.error);
         break;
       }
 

@@ -6,6 +6,7 @@ import { SubscriptionStatus, CourseCategory } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { sendWelcomeWithPasswordSetup, sendPurchaseConfirmationEmail } from '../../utils/sendEmail';
+import { handleSubscriptionChange } from '../../utils/discord';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -1089,6 +1090,10 @@ export const updateUserSubscription = async (req: Request, res: Response) => {
             where: { id: userId as string },
             data: updateData
         });
+
+        // Fire-and-forget: kick from Discord if status changed to non-active
+        handleSubscriptionChange(userId as string, updatedUser.subscriptionStatus).catch(console.error);
+
         res.status(200).json(updatedUser);
     } catch (error) {
         console.error('Error updating user subscription manually:', error);

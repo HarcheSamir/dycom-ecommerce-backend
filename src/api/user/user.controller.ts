@@ -34,6 +34,7 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
         coursePurchases: { select: { courseId: true } },
         availableCourseDiscounts: true,
         hasSeenWelcomeModal: true,
+        discordId: true,
         searchHistory: {
           orderBy: { createdAt: 'desc' },
           take: 10,

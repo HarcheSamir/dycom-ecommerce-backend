@@ -24,6 +24,7 @@ import resourceRoutes from './api/resource/resource.routes';
 import shopOrderRoutes from './api/shop-order/shop-order.routes';
 import settingsRoutes from './api/settings/settings.routes';
 import academyAgentRoutes from './api/academy-agent/academy-agent.routes';
+import discordRoutes from './api/discord/discord.routes';
 import { exec } from 'child_process';
 
 (BigInt.prototype as any).toJSON = function () {
@@ -106,6 +107,7 @@ app.use('/api/resources', resourceRoutes);
 app.use('/api/shop-orders', authMiddleware, shopOrderRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/academy-agent', authMiddleware, academyAgentRoutes);
+app.use('/api/discord', authMiddleware, discordRoutes);
 
 
 

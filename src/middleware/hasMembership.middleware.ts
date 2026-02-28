@@ -58,6 +58,11 @@ export const hasMembershipMiddleware = async (req: AuthenticatedRequest, res: Re
             data: { subscriptionStatus: 'PAST_DUE' }
         });
 
+        // Fire-and-forget: kick from Discord
+        import('../utils/discord').then(({ handleSubscriptionChange }) => {
+            handleSubscriptionChange(userId, 'PAST_DUE').catch(console.error);
+        }).catch(console.error);
+
         // Fire-and-forget email notification
         try {
             const { sendInstallmentExpiredEmail } = await import('../utils/sendEmail');

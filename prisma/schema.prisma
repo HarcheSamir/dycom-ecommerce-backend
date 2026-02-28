@@ -50,6 +50,8 @@ model User {
   accountSetupToken        String?            @unique
   shopOrders               ShopOrder[]
   agentConversation        AgentConversation?
+  discordId                String?            @unique
+  discordAccessToken       String?            @db.Text
 
   @@index([referredById], map: "users_referredById_fkey")
   @@map("users")

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { PrismaClient, SubscriptionStatus } from "@prisma/client";
 import { sendPurchaseConfirmationEmail, sendShopOrderConfirmationEmail, sendNewShopOrderAlertToAdmins, sendWelcomeWithPasswordSetup } from "../../utils/sendEmail";
 import { shopOrderService } from "../shop-order/shop-order.service";
+import { handleSubscriptionChange } from "../../utils/discord";
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 
@@ -298,12 +299,18 @@ async function handleRevokeAccess(data: any) {
 
     console.log(`⚠️ Revoking access for: ${email} (Tx: ${transactionCode})`);
 
+    const user = await prisma.user.findFirst({ where: { email } });
+    if (!user) return;
+
     await prisma.user.update({
         where: { email },
         data: {
             subscriptionStatus: 'CANCELED',
         }
     });
+
+    // Fire-and-forget: kick from Discord
+    handleSubscriptionChange(user.id, 'CANCELED').catch(console.error);
 }
 
 /**
