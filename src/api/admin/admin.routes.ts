@@ -70,6 +70,11 @@ router.put('/users/:userId/subscription', updateUserSubscription); // Manual edi
 router.post('/users/:userId/sync-subscription', syncStripeSubscription); // Sync from Stripe ID
 router.post('/users/:userId/sync-payment', addStripePayment); // Add Transaction from Stripe ID
 
+// Newsletter
+import { sendNewsletter, getNewsletterHistory, getRecipientCount } from './newsletter.controller';
+router.post('/newsletter/send', sendNewsletter);
+router.get('/newsletter/history', getNewsletterHistory);
+router.get('/newsletter/recipient-count', getRecipientCount);
 
 
 export default router;

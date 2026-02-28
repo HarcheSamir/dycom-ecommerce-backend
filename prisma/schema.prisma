@@ -52,6 +52,7 @@ model User {
   agentConversation        AgentConversation?
   discordId                String?            @unique
   discordAccessToken       String?            @db.Text
+  newsletters              Newsletter[]
 
   @@index([referredById], map: "users_referredById_fkey")
   @@map("users")
@@ -662,4 +663,19 @@ enum PaymentStatus {
   PENDING
   PAID
   REFUNDED
+}
+
+model Newsletter {
+  id             String   @id @default(uuid())
+  subject        String
+  htmlContent    String   @db.LongText
+  audience       String   @default("ALL")
+  recipientCount Int      @default(0)
+  sentBy         String
+  sentAt         DateTime @default(now())
+
+  sender         User     @relation(fields: [sentBy], references: [id])
+
+  @@index([sentBy])
+  @@map("newsletters")
 }
