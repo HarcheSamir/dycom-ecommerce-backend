@@ -32,6 +32,9 @@ function wrapInEmailTemplate(htmlContent: string, subject: string): string {
           <p style="font-size: 12px; color: #9ca3af; margin: 5px 0 0 0;">
             <a href="${FRONTEND_URL}" style="color: #9ca3af; text-decoration: none;">dycom-club.com</a>
           </p>
+          <p style="font-size: 11px; color: #9ca3af; margin: 15px 0 0 0;">
+            Vous ne souhaitez plus recevoir ces annonces ? <a href="mailto:support@dycom-club.com?subject=Désinscription" style="color: #9ca3af; text-decoration: underline;">Se désinscrire</a>
+          </p>
         </div>
       </div>
     </div>
