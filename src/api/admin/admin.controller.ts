@@ -1022,8 +1022,9 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
 
 /**
  * @description Manually update user subscription fields (Status, Installments).
- * Auto-extends currentPeriodEnd by 30 days when installmentsPaid increases.
- * Auto-upgrades to LIFETIME_ACCESS when installmentsPaid >= installmentsRequired.
+ * ADMIN'S DROPDOWN SELECTION IS THE FINAL AUTHORITY — no auto-overrides.
+ * Auto-extend of currentPeriodEnd by 30 days only when installmentsPaid increases
+ * AND the admin didn't explicitly set a date.
  */
 export const updateUserSubscription = async (req: Request, res: Response) => {
     const { userId } = req.params;
@@ -1032,6 +1033,18 @@ export const updateUserSubscription = async (req: Request, res: Response) => {
     try {
         const newPaid = Number(installmentsPaid);
         const newRequired = Number(installmentsRequired);
+
+        // --- Input Validation ---
+        if (isNaN(newPaid) || newPaid < 0) {
+            return res.status(400).json({ error: 'installmentsPaid must be >= 0.' });
+        }
+        if (isNaN(newRequired) || newRequired < 1) {
+            return res.status(400).json({ error: 'installmentsRequired must be >= 1.' });
+        }
+        const validStatuses = Object.values(SubscriptionStatus);
+        if (!validStatuses.includes(subscriptionStatus as SubscriptionStatus)) {
+            return res.status(400).json({ error: `Invalid subscription status: ${subscriptionStatus}` });
+        }
 
         // Fetch the current user to detect installment changes
         const currentUser = await prisma.user.findUnique({
@@ -1043,53 +1056,38 @@ export const updateUserSubscription = async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'User not found.' });
         }
 
-        // Check if all installments are now complete → auto-upgrade to LIFETIME
-        if (newPaid >= newRequired && newRequired > 0) {
-            const updatedUser = await prisma.user.update({
-                where: { id: userId as string },
-                data: {
-                    subscriptionStatus: SubscriptionStatus.LIFETIME_ACCESS,
-                    installmentsPaid: newPaid,
-                    installmentsRequired: newRequired,
-                    currentPeriodEnd: null, // No expiry for lifetime
-                    stripeSubscriptionId: null
-                }
-            });
-            console.log(`✅ User ${userId} auto-upgraded to LIFETIME_ACCESS (${newPaid}/${newRequired} installments paid)`);
-            return res.status(200).json(updatedUser);
-        }
-
-        // Build the update data
+        // --- Build the update data: Admin's chosen status is ALWAYS respected ---
         const updateData: any = {
             subscriptionStatus: subscriptionStatus as SubscriptionStatus,
             installmentsPaid: newPaid,
             installmentsRequired: newRequired
         };
 
-        // If explicitly requested by Admin UI, override the date directly
+        // --- Automatic cleanup for LIFETIME: clear stripe sub (they're done paying) ---
+        if (subscriptionStatus === SubscriptionStatus.LIFETIME_ACCESS) {
+            updateData.stripeSubscriptionId = null;
+        }
+
+        // --- Date logic: NEVER auto-wipe currentPeriodEnd ---
         if (currentPeriodEnd !== undefined) {
+            // Admin explicitly set/cleared the date in the form
             updateData.currentPeriodEnd = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
             console.log(`📅 Admin manually set currentPeriodEnd to ${currentPeriodEnd} for user ${userId}`);
-
-            // Auto-restore to ACTIVE or SMMA_ONLY if they were PAST_DUE but now have a valid date
-            if (updateData.currentPeriodEnd && updateData.currentPeriodEnd > new Date() && currentUser.subscriptionStatus === 'PAST_DUE') {
-                updateData.subscriptionStatus = (subscriptionStatus as SubscriptionStatus) === SubscriptionStatus.SMMA_ONLY ? SubscriptionStatus.SMMA_ONLY : SubscriptionStatus.ACTIVE;
-            }
-        }
-        // Otherwise, run the automatic extension logic if they paid an installment manually
-        else if (newPaid > currentUser.installmentsPaid && !currentUser.stripeSubscriptionId) {
+        } else if (newPaid > currentUser.installmentsPaid && !currentUser.stripeSubscriptionId) {
+            // Admin bumped installmentsPaid without touching the date → auto-extend +30 days
             const newPeriodEnd = new Date();
             newPeriodEnd.setDate(newPeriodEnd.getDate() + 30);
             updateData.currentPeriodEnd = newPeriodEnd;
-            // If user was PAST_DUE, restore to their intended tier
-            updateData.subscriptionStatus = (subscriptionStatus as SubscriptionStatus) === SubscriptionStatus.SMMA_ONLY ? SubscriptionStatus.SMMA_ONLY : SubscriptionStatus.ACTIVE;
             console.log(`📅 Auto-extended currentPeriodEnd to ${newPeriodEnd.toISOString()} for user ${userId}`);
         }
+        // Otherwise: don't touch currentPeriodEnd at all (keep existing value)
 
         const updatedUser = await prisma.user.update({
             where: { id: userId as string },
             data: updateData
         });
+
+        console.log(`✅ Admin updated user ${userId}: status=${updatedUser.subscriptionStatus}, paid=${newPaid}/${newRequired}`);
 
         // Fire-and-forget: kick from Discord if status changed to non-active
         handleSubscriptionChange(userId as string, updatedUser.subscriptionStatus).catch(console.error);
@@ -1187,6 +1185,9 @@ export const syncStripeSubscription = async (req: Request, res: Response) => {
                 currentPeriodEnd: dateObj
             }
         });
+
+        // Fire-and-forget: kick from Discord if synced status is non-active
+        handleSubscriptionChange(userId as string, prismaStatus).catch(console.error);
 
         res.status(200).json({ message: 'Synced successfully', user: updatedUser });
 
