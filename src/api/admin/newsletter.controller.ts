@@ -87,7 +87,7 @@ export const sendNewsletter = async (req: AuthenticatedRequest, res: Response) =
             return res.status(400).json({ error: 'Subject and content are required.' });
         }
 
-        const validAudiences = ['ALL', 'ACTIVE', 'LIFETIME', 'SMMA', 'SPECIFIC'];
+        const validAudiences = ['ALL', 'ACTIVE', 'LIFETIME', 'SMMA', 'SPECIFIC', 'ALL_PAID'];
         const selectedAudience = validAudiences.includes(audience) ? audience : 'ALL';
 
         // Build the base user query based on audience
@@ -96,6 +96,9 @@ export const sendNewsletter = async (req: AuthenticatedRequest, res: Response) =
 
         if (!isSpecific) {
             switch (selectedAudience) {
+                case 'ALL_PAID':
+                    whereClause = { subscriptionStatus: { in: ['ACTIVE', 'TRIALING', 'LIFETIME_ACCESS', 'SMMA_ONLY'] } };
+                    break;
                 case 'ACTIVE':
                     whereClause = { subscriptionStatus: { in: ['ACTIVE', 'TRIALING'] } };
                     break;
@@ -240,6 +243,9 @@ export const getRecipientCount = async (req: Request, res: Response) => {
 
         let whereClause: any = {};
         switch (audience) {
+            case 'ALL_PAID':
+                whereClause = { subscriptionStatus: { in: ['ACTIVE', 'TRIALING', 'LIFETIME_ACCESS', 'SMMA_ONLY'] } };
+                break;
             case 'ACTIVE':
                 whereClause = { subscriptionStatus: { in: ['ACTIVE', 'TRIALING'] } };
                 break;
