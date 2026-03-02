@@ -10,35 +10,73 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'https://dycom-club.com';
  * Wraps the admin's HTML content in a branded Dycom email template.
  */
 function wrapInEmailTemplate(htmlContent: string, subject: string): string {
-    return `
-    <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px 0; color: #333; background-color: #f9fafb;">
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+    return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>${subject}</title>
+    <style>
+        /* Reset styles for email clients */
+        body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+        table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+        img { -ms-interpolation-mode: bicubic; }
+        img { border: 0; outline: none; text-decoration: none; }
+        table { border-collapse: collapse !important; }
+        body { margin: 0 !important; padding: 0 !important; width: 100% !important; }
         
-        <!-- Header -->
-        <div style="background-color: #111317; padding: 30px; text-align: center;">
-          <img src="https://dycom-club.com/logo2.png" alt="Dycom Club" style="height: 40px; margin: 0 auto; display: block;" />
-        </div>
+        /* Mobile responsive styles */
+        @media screen and (max-width: 600px) {
+            .email-container { width: 100% !important; margin: auto !important; border-radius: 0 !important; }
+            .fluid { max-width: 100% !important; height: auto !important; margin-left: auto !important; margin-right: auto !important; }
+            .content-padding { padding: 20px !important; }
+            .header-padding { padding: 20px !important; }
+            .wrapper-padding { padding: 10px 0 !important; }
+        }
+    </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f9fafb;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="table-layout: fixed; background-color: #f9fafb;">
+        <tr>
+            <td align="center" class="wrapper-padding" style="padding: 40px 0;">
+                <table border="0" cellpadding="0" cellspacing="0" width="600" class="email-container" style="background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #333333;">
+                    
+                    <!-- Header -->
+                    <tr>
+                        <td align="center" class="header-padding" style="background-color: #111317; padding: 30px;">
+                            <img src="https://dycom-club.com/logo2.png" alt="Dycom Club" width="200" style="display: block; width: 200px; max-width: 100%; outline: none; border: none; text-decoration: none;" />
+                        </td>
+                    </tr>
 
-        <!-- Body -->
-        <div style="padding: 30px;">
-          ${htmlContent}
-        </div>
+                    <!-- Body -->
+                    <tr>
+                        <td class="content-padding" style="padding: 30px; line-height: 1.6; font-size: 16px;">
+                            ${htmlContent}
+                        </td>
+                    </tr>
 
-        <!-- Footer -->
-        <div style="background-color: #f3f4f6; padding: 20px; text-align: center; border-top: 1px solid #e5e7eb;">
-          <p style="font-size: 12px; color: #9ca3af; margin: 0;">
-            © ${new Date().getFullYear()} Dycom Club. Tous droits réservés.
-          </p>
-          <p style="font-size: 12px; color: #9ca3af; margin: 5px 0 0 0;">
-            <a href="${FRONTEND_URL}" style="color: #9ca3af; text-decoration: none;">dycom-club.com</a>
-          </p>
-          <p style="font-size: 11px; color: #9ca3af; margin: 15px 0 0 0;">
-            Vous ne souhaitez plus recevoir ces annonces ? <a href="mailto:support@dycom-club.com?subject=Désinscription" style="color: #9ca3af; text-decoration: underline;">Se désinscrire</a>
-          </p>
-        </div>
-      </div>
-    </div>
-  `;
+                    <!-- Footer -->
+                    <tr>
+                        <td align="center" style="background-color: #f3f4f6; padding: 20px; border-top: 1px solid #e5e7eb;">
+                            <p style="font-size: 12px; color: #9ca3af; margin: 0;">
+                                © ${new Date().getFullYear()} Dycom Club. Tous droits réservés.
+                            </p>
+                            <p style="font-size: 12px; color: #9ca3af; margin: 5px 0 0 0;">
+                                <a href="${FRONTEND_URL}" style="color: #9ca3af; text-decoration: none;">dycom-club.com</a>
+                            </p>
+                            <p style="font-size: 11px; color: #9ca3af; margin: 15px 0 0 0;">
+                                Vous ne souhaitez plus recevoir ces annonces ? <a href="mailto:support@dycom-club.com?subject=Désinscription" style="color: #9ca3af; text-decoration: underline;">Se désinscrire</a>
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>`;
 }
 
 /**
