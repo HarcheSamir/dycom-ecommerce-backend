@@ -76,5 +76,15 @@ router.post('/newsletter/send', sendNewsletter);
 router.get('/newsletter/history', getNewsletterHistory);
 router.get('/newsletter/recipient-count', getRecipientCount);
 
+// Announcements (Bandes Annonces)
+import multer from 'multer';
+import { getAnnouncements, createAnnouncement, updateAnnouncement, deleteAnnouncement, toggleAnnouncement } from './announcement.controller';
+const announcementUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+router.get('/announcements', getAnnouncements);
+router.post('/announcements', announcementUpload.single('image'), createAnnouncement);
+router.put('/announcements/:id', announcementUpload.single('image'), updateAnnouncement);
+router.delete('/announcements/:id', deleteAnnouncement);
+router.put('/announcements/:id/toggle', toggleAnnouncement);
+
 
 export default router;

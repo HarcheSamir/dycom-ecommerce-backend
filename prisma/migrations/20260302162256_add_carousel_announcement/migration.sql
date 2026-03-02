@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `announcements` MODIFY `type` ENUM('BANNER', 'MODAL', 'CAROUSEL') NOT NULL DEFAULT 'BANNER';
