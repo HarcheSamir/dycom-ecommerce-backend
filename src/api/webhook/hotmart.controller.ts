@@ -375,6 +375,16 @@ async function handleCoursePurchase(data: any) {
 
         // Send welcome email with password setup link
         await sendWelcomeWithPasswordSetup(email, firstName, accountSetupToken);
+    } else {
+        // Existing user bought SMMA — upgrade status only if they have no active access
+        const inactiveStatuses = ['INCOMPLETE', 'CANCELED', 'PAST_DUE'];
+        if (inactiveStatuses.includes(user.subscriptionStatus)) {
+            console.log(`📈 Upgrading ${email} from ${user.subscriptionStatus} → SMMA_ONLY`);
+            await prisma.user.update({
+                where: { id: user.id },
+                data: { subscriptionStatus: 'SMMA_ONLY' }
+            });
+        }
     }
 
     // 2. Verify the course exists
