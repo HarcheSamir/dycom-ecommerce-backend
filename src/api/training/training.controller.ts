@@ -166,7 +166,10 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
           createdAt: true, // User join date
           subscriptionStatus: true,
           accountType: true,
-          coursePurchases: { where: { courseId: courseId as string } }
+          coursePurchases: {
+            where: { courseId: courseId as string },
+            select: { id: true, status: true, installmentsPaid: true, installmentsRequired: true, currentPeriodEnd: true }
+          }
         }
       })
     ]);
@@ -181,7 +184,25 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
       user.subscriptionStatus === SubscriptionStatus.ACTIVE ||
       user.subscriptionStatus === SubscriptionStatus.LIFETIME_ACCESS ||
       user.subscriptionStatus === SubscriptionStatus.TRIALING;
-    const hasPurchased = (user.coursePurchases?.length ?? 0) > 0;
+
+    // Check for an active course purchase
+    let activePurchase = user.coursePurchases?.find((p: any) => p.status === 'ACTIVE') || null;
+
+    // Auto-expire: if purchase period ended and installments incomplete, downgrade to PAST_DUE
+    if (
+      activePurchase &&
+      activePurchase.currentPeriodEnd &&
+      new Date() > new Date(activePurchase.currentPeriodEnd) &&
+      activePurchase.installmentsPaid < activePurchase.installmentsRequired
+    ) {
+      await prisma.coursePurchase.update({
+        where: { id: activePurchase.id },
+        data: { status: 'PAST_DUE' }
+      });
+      activePurchase = null; // Treat as no access
+    }
+
+    const hasPurchased = !!activePurchase;
     const isGlobalFree = (course.priceEur === null || course.priceEur === 0) && (course.priceUsd === null || course.priceUsd === 0);
 
     // Paid courses require explicit purchase — free courses require subscription

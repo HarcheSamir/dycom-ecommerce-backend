@@ -402,9 +402,16 @@ async function handleCoursePurchase(data: any) {
         create: {
             userId: user.id,
             courseId,
-            purchasePrice: amount
+            purchasePrice: amount,
+            status: 'ACTIVE',
+            installmentsPaid: 1,
+            installmentsRequired: 1
         },
-        update: {} // Already purchased, do nothing
+        update: {
+            status: 'ACTIVE',
+            installmentsPaid: 1,
+            installmentsRequired: 1
+        }
     });
 
     // 4. Log Transaction (idempotent check)
@@ -440,7 +447,7 @@ async function handleCoursePurchase(data: any) {
 }
 
 /**
- * Handle course purchase refund — removes the CoursePurchase record
+ * Handle course purchase refund — revokes access by setting status to REVOKED
  */
 async function handleCourseRefund(data: any) {
     const email = data.buyer.email;
@@ -457,9 +464,10 @@ async function handleCourseRefund(data: any) {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return;
 
-    // Remove course access
-    await prisma.coursePurchase.deleteMany({
-        where: { userId: user.id, courseId }
+    // Revoke course access (keep record for audit trail)
+    await prisma.coursePurchase.updateMany({
+        where: { userId: user.id, courseId },
+        data: { status: 'REVOKED' }
     });
 
     console.log(`✅ Course access revoked for ${email} — course ${courseId}`);

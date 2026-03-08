@@ -217,13 +217,23 @@ model CoursePurchase {
   purchasePrice Float
   purchasedAt   DateTime    @default(now())
   userId        String
-  courseId      String
+  courseId       String
+  status              CoursePurchaseStatus @default(ACTIVE)
+  installmentsPaid    Int                  @default(1)
+  installmentsRequired Int                 @default(1)
+  currentPeriodEnd    DateTime?
   course        VideoCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, courseId])
   @@index([courseId], map: "course_purchases_courseId_fkey")
   @@map("course_purchases")
+}
+
+enum CoursePurchaseStatus {
+  ACTIVE
+  PAST_DUE
+  REVOKED
 }
 
 model Video {

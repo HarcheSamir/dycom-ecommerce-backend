@@ -934,6 +934,9 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
                 videoProgress: { where: { completed: true } }, // Only get completed videos
                 referrer: true,
                 referrals: true,
+                coursePurchases: {
+                    include: { course: { select: { id: true, title: true } } }
+                },
             }
         });
 
@@ -997,6 +1000,17 @@ export const getAdminUserDetails = async (req: Request, res: Response) => {
                 transactions: user.transactions as any,
             },
             courses: courseProgress,
+            smmaAccess: (user as any).coursePurchases?.map((cp: any) => ({
+                id: cp.id,
+                courseId: cp.courseId,
+                courseTitle: cp.course?.title || 'Unknown',
+                status: cp.status,
+                purchasePrice: cp.purchasePrice,
+                purchasedAt: cp.purchasedAt,
+                installmentsPaid: cp.installmentsPaid,
+                installmentsRequired: cp.installmentsRequired,
+                currentPeriodEnd: cp.currentPeriodEnd,
+            })) || [],
             affiliate: {
                 referredBy: user.referrer ? `${(user.referrer as any).firstName} ${(user.referrer as any).lastName}` : null,
                 referralsCount: (user as any).referrals ? (user as any).referrals.length : 0
@@ -1523,8 +1537,8 @@ export const createUser = async (req: Request, res: Response) => {
             if (courseId) {
                 await prisma.coursePurchase.upsert({
                     where: { userId_courseId: { userId: user.id, courseId } },
-                    create: { userId: user.id, courseId, purchasePrice: 0 },
-                    update: {}
+                    create: { userId: user.id, courseId, purchasePrice: 0, status: 'ACTIVE', installmentsPaid: 1, installmentsRequired: 1 },
+                    update: { status: 'ACTIVE' }
                 });
                 console.log(`📚 Admin granted SMMA course access to ${normalizedEmail}`);
             } else {
@@ -1595,6 +1609,106 @@ export const createUser = async (req: Request, res: Response) => {
     } catch (error) {
         console.error('Error creating/updating user:', error);
         res.status(500).json({ error: 'Failed to create user.' });
+    }
+};
+
+
+/**
+ * Grant SMMA course access to any user (without changing their subscriptionStatus).
+ * Creates a CoursePurchase record for the SMMA course.
+ */
+export const grantSmmaAccess = async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const { installmentsPaid, installmentsRequired, currentPeriodEnd } = req.body;
+
+    const courseId = process.env.HOTMART_COURSE_ID;
+    if (!courseId) {
+        return res.status(500).json({ error: 'HOTMART_COURSE_ID env var is not set.' });
+    }
+
+    try {
+        const user = await prisma.user.findUnique({ where: { id: userId as string } });
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+
+        const course = await prisma.videoCourse.findUnique({ where: { id: courseId } });
+        if (!course) return res.status(404).json({ error: 'SMMA course not found.' });
+
+        const paid = Number(installmentsPaid) || 1;
+        const required = Number(installmentsRequired) || 1;
+
+        const purchase = await prisma.coursePurchase.upsert({
+            where: { userId_courseId: { userId: userId as string, courseId } },
+            create: {
+                userId: userId as string,
+                courseId,
+                purchasePrice: 0, // Admin grant, no charge
+                status: 'ACTIVE',
+                installmentsPaid: paid,
+                installmentsRequired: required,
+                currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd) : null
+            },
+            update: {
+                status: 'ACTIVE',
+                installmentsPaid: paid,
+                installmentsRequired: required,
+                currentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd) : null
+            }
+        });
+
+        console.log(`📚 Admin granted SMMA access to ${user.email} (${paid}/${required} installments)`);
+        res.status(200).json({ message: 'SMMA access granted.', purchase });
+
+    } catch (error) {
+        console.error('Error granting SMMA access:', error);
+        res.status(500).json({ error: 'Failed to grant SMMA access.' });
+    }
+};
+
+/**
+ * Update SMMA course access for a user (installments, status, expiry).
+ */
+export const updateSmmaAccess = async (req: Request, res: Response) => {
+    const { userId } = req.params;
+    const { installmentsPaid, installmentsRequired, currentPeriodEnd, status } = req.body;
+
+    const courseId = process.env.HOTMART_COURSE_ID;
+    if (!courseId) {
+        return res.status(500).json({ error: 'HOTMART_COURSE_ID env var is not set.' });
+    }
+
+    try {
+        const purchase = await prisma.coursePurchase.findUnique({
+            where: { userId_courseId: { userId: userId as string, courseId } }
+        });
+
+        if (!purchase) {
+            return res.status(404).json({ error: 'No SMMA purchase found for this user.' });
+        }
+
+        const validStatuses = ['ACTIVE', 'PAST_DUE', 'REVOKED'];
+        if (status && !validStatuses.includes(status)) {
+            return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
+        }
+
+        const updateData: any = {};
+        if (status !== undefined) updateData.status = status;
+        if (installmentsPaid !== undefined) updateData.installmentsPaid = Number(installmentsPaid);
+        if (installmentsRequired !== undefined) updateData.installmentsRequired = Number(installmentsRequired);
+        if (currentPeriodEnd !== undefined) {
+            updateData.currentPeriodEnd = currentPeriodEnd ? new Date(currentPeriodEnd) : null;
+        }
+
+        const updated = await prisma.coursePurchase.update({
+            where: { id: purchase.id },
+            data: updateData
+        });
+
+        console.log(`📚 Admin updated SMMA access for user ${userId}: status=${updated.status}, paid=${updated.installmentsPaid}/${updated.installmentsRequired}`);
+        res.status(200).json({ message: 'SMMA access updated.', purchase: updated });
+
+    } catch (error) {
+        console.error('Error updating SMMA access:', error);
+        res.status(500).json({ error: 'Failed to update SMMA access.' });
     }
 };
 
