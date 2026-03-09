@@ -67,6 +67,30 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
       return res.status(404).json({ error: 'User not found.' });
     }
 
+    // --- Auto-expire SMMA_ONLY users whose installment period has passed ---
+    if (
+      userProfile.subscriptionStatus === 'SMMA_ONLY' &&
+      userProfile.currentPeriodEnd &&
+      new Date() > new Date(userProfile.currentPeriodEnd) &&
+      userProfile.installmentsPaid < userProfile.installmentsRequired
+    ) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { subscriptionStatus: 'PAST_DUE' }
+      });
+      (userProfile as any).subscriptionStatus = 'PAST_DUE';
+
+      // Also sync CoursePurchase status
+      const courseId = process.env.HOTMART_COURSE_ID;
+      if (courseId) {
+        await prisma.coursePurchase.updateMany({
+          where: { userId, courseId, status: 'ACTIVE' },
+          data: { status: 'PAST_DUE' }
+        });
+      }
+      console.log(`⚠️ Auto-expired SMMA_ONLY user ${userId} to PAST_DUE (profile load)`);
+    }
+
     // Sync Discord membership — if user left the server, clear their link
     if (userProfile.discordId) {
       const stillInGuild = await syncDiscordMembership(userId, userProfile.discordId);
