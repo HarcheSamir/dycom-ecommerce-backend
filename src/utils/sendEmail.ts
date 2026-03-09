@@ -90,21 +90,21 @@ export const sendWelcomeWithPasswordSetup = async (
       subject: '🎉 Bienvenue chez Dycom Club - Finalisez votre compte',
       html: `
         <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #f8f9fa;">
-          <div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border-radius: 16px; padding: 40px; text-align: center;">
+          <div style="background-color: #1a1a2e; border-radius: 16px; padding: 40px; text-align: center;">
             <img src="https://dycom-club.com/logo2.png" alt="Dycom Club" style="height: 50px; margin-bottom: 30px;" />
             
-            <h1 style="color: #ffffff !important; font-size: 28px; margin-bottom: 15px;">Bienvenue ${firstName} ! 🎉</h1>
+            <h1 style="color: #ffffff; font-size: 28px; margin-bottom: 15px;">Bienvenue ${firstName} ! 🎉</h1>
             
-            <p style="color: #b8c1cc !important; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
+            <p style="color: #b8c1cc; font-size: 16px; line-height: 1.6; margin-bottom: 30px;">
               Votre paiement a été confirmé et votre accès à vie à Dycom Club est maintenant activé !
             </p>
 
-            <div style="background: rgba(255,255,255,0.1); border-radius: 12px; padding: 25px; margin-bottom: 30px;">
-              <p style="color: #ffffff !important; font-size: 16px; margin-bottom: 20px;">
+            <div style="background-color: #2a2a42; border-radius: 12px; padding: 25px; margin-bottom: 30px;">
+              <p style="color: #ffffff; font-size: 16px; margin-bottom: 20px;">
                 <strong>Dernière étape :</strong> Créez votre mot de passe pour accéder à votre espace membre.
               </p>
               
-              <a href="${setupLink}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
+              <a href="${setupLink}" style="display: inline-block; background-color: #7F56D9; color: #ffffff; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
                 Créer mon mot de passe
               </a>
             </div>

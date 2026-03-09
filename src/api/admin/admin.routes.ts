@@ -7,7 +7,7 @@ import {
     updateSection, deleteSection, updateVideo, deleteVideo, updateVideoOrder,
     getSettings, updateSettings, getMembershipPrices, updateMembershipPrices, updateSectionOrder, getAdminUsers, grantLifetimeAccess,
     exportAdminUsers, getAdminUserDetails, updateUserSubscription, syncStripeSubscription, addStripePayment, getPastDueUsers,
-    getAdminUnreadCounts, createUser, grantSmmaAccess, updateSmmaAccess
+    getAdminUnreadCounts, createUser, grantSmmaAccess, updateSmmaAccess, resendWelcomeEmail
 
 } from './admin.controller';
 import { getAffiliateLeaderboard } from './affiliate.controller';
@@ -71,6 +71,7 @@ router.post('/users/:userId/sync-subscription', syncStripeSubscription); // Sync
 router.post('/users/:userId/sync-payment', addStripePayment); // Add Transaction from Stripe ID
 router.post('/users/:userId/grant-smma', grantSmmaAccess); // Grant SMMA course access
 router.put('/users/:userId/smma-access', updateSmmaAccess); // Update SMMA course access
+router.post('/users/:userId/resend-welcome', resendWelcomeEmail); // Resend welcome email
 
 // Newsletter
 import { sendNewsletter, getNewsletterHistory, getRecipientCount } from './newsletter.controller';

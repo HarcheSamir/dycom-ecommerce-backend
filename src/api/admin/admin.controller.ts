@@ -1712,4 +1712,36 @@ export const updateSmmaAccess = async (req: Request, res: Response) => {
     }
 };
 
+/**
+ * Resend the welcome/password-setup email to an existing user.
+ * Uses the existing permanent accountSetupToken (no new token generated).
+ */
+export const resendWelcomeEmail = async (req: Request, res: Response) => {
+    const { userId } = req.params;
 
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId as string },
+            select: { email: true, firstName: true, accountSetupToken: true }
+        });
+
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+
+        if (!user.accountSetupToken) {
+            return res.status(400).json({ error: 'This user has no account setup token. They may have already set their password.' });
+        }
+
+        const result = await sendWelcomeWithPasswordSetup(user.email, user.firstName, user.accountSetupToken);
+
+        if (!result.success) {
+            return res.status(500).json({ error: 'Failed to send email.' });
+        }
+
+        console.log(`📧 Admin resent welcome email to ${user.email}`);
+        res.status(200).json({ message: `Welcome email resent to ${user.email}` });
+
+    } catch (error) {
+        console.error('Error resending welcome email:', error);
+        res.status(500).json({ error: 'Failed to resend welcome email.' });
+    }
+};
