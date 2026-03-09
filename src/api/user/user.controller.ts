@@ -79,15 +79,6 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
         data: { subscriptionStatus: 'PAST_DUE' }
       });
       (userProfile as any).subscriptionStatus = 'PAST_DUE';
-
-      // Also sync CoursePurchase status
-      const courseId = process.env.HOTMART_COURSE_ID;
-      if (courseId) {
-        await prisma.coursePurchase.updateMany({
-          where: { userId, courseId, status: 'ACTIVE' },
-          data: { status: 'PAST_DUE' }
-        });
-      }
       console.log(`⚠️ Auto-expired SMMA_ONLY user ${userId} to PAST_DUE (profile load)`);
     }
 
