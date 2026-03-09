@@ -32,7 +32,7 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
         currentPeriodEnd: true,
         installmentsPaid: true,       // <--- Return these to frontend
         installmentsRequired: true,   // <---
-        coursePurchases: { select: { courseId: true } },
+        coursePurchases: { select: { courseId: true, status: true } },
         availableCourseDiscounts: true,
         hasSeenWelcomeModal: true,
         discordId: true,
