@@ -209,7 +209,27 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
     const hasAccess = isAdmin || hasPurchased || (isGlobalFree && isSubscriber);
 
     if (!hasAccess) {
-      return res.status(403).json({ error: 'Access denied.' });
+      // Determine the specific reason for denial
+      const isPaidCourse = !isGlobalFree;
+      const anyPurchase = user.coursePurchases?.[0] as any;
+
+      const purchaseDetails = anyPurchase ? {
+        installmentsPaid: anyPurchase.installmentsPaid,
+        installmentsRequired: anyPurchase.installmentsRequired,
+        currentPeriodEnd: anyPurchase.currentPeriodEnd,
+        status: anyPurchase.status
+      } : null;
+
+      if (isPaidCourse && anyPurchase?.status === 'PAST_DUE') {
+        return res.status(403).json({ error: 'Votre accès a été suspendu car un paiement est en retard. Veuillez régulariser votre situation.', reason: 'INSTALLMENT_EXPIRED', purchase: purchaseDetails });
+      }
+      if (isPaidCourse && anyPurchase?.status === 'REVOKED') {
+        return res.status(403).json({ error: 'Votre accès à cette formation a été révoqué.', reason: 'ACCESS_REVOKED', purchase: purchaseDetails });
+      }
+      if (isPaidCourse && !anyPurchase) {
+        return res.status(403).json({ error: 'Vous devez acheter cette formation pour y accéder.', reason: 'NO_PURCHASE' });
+      }
+      return res.status(403).json({ error: 'Vous devez avoir un abonnement actif pour accéder à cette formation.', reason: 'NO_SUBSCRIPTION' });
     }
 
     // --- NEW CONTENT LOGIC ---
