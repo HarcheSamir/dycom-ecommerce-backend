@@ -67,9 +67,9 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    // --- Auto-expire SMMA_ONLY users whose installment period has passed ---
+    // --- Auto-expire users whose installment period has passed ---
     if (
-      userProfile.subscriptionStatus === 'SMMA_ONLY' &&
+      (userProfile.subscriptionStatus === 'SMMA_ONLY' || userProfile.subscriptionStatus === 'ACTIVE') &&
       userProfile.currentPeriodEnd &&
       new Date() > new Date(userProfile.currentPeriodEnd) &&
       userProfile.installmentsPaid < userProfile.installmentsRequired
@@ -79,7 +79,7 @@ export const getUserProfile = async (req: AuthenticatedRequest, res: Response) =
         data: { subscriptionStatus: 'PAST_DUE' }
       });
       (userProfile as any).subscriptionStatus = 'PAST_DUE';
-      console.log(`⚠️ Auto-expired SMMA_ONLY user ${userId} to PAST_DUE (profile load)`);
+      console.log(`⚠️ Auto-expired ${userProfile.subscriptionStatus} user ${userId} to PAST_DUE (profile load)`);
     }
 
     // Sync Discord membership — if user left the server, clear their link
