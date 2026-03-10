@@ -104,9 +104,15 @@ export const sendWelcomeWithPasswordSetup = async (
                 <strong>Dernière étape :</strong> Créez votre mot de passe pour accéder à votre espace membre.
               </p>
               
-              <a href="${setupLink}" style="display: inline-block; background-color: #7F56D9; color: #ffffff; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">
-                Créer mon mot de passe
-              </a>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto;">
+                <tr>
+                  <td align="center" bgcolor="#7F56D9" style="border-radius: 8px;">
+                    <a href="${setupLink}" target="_blank" style="display: block; padding: 16px 40px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 16px; font-weight: bold; color: #ffffff; text-decoration: none;">
+                      Créer mon mot de passe
+                    </a>
+                  </td>
+                </tr>
+              </table>
             </div>
 
             <p style="color: #8892a0; font-size: 14px;">
