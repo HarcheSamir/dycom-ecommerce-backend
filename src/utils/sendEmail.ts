@@ -112,6 +112,11 @@ export const sendWelcomeWithPasswordSetup = async (
             <p style="color: #8892a0; font-size: 14px;">
               Ce lien est personnel et permanent. Conservez-le précieusement.
             </p>
+
+            <p style="color: #8892a0; font-size: 12px; line-height: 1.6; word-break: break-all;">
+              Si le bouton ne fonctionne pas, copiez et collez ce lien dans votre navigateur :<br/>
+              <a href="${setupLink}" style="color: #7F56D9; text-decoration: underline;">${setupLink}</a>
+            </p>
           </div>
 
           <div style="text-align: center; padding-top: 30px;">
