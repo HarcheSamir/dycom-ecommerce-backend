@@ -1,6 +1,6 @@
-// src/api/auth/auth.controller.ts
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import { PrismaClient } from '@prisma/client';
 import { authService } from './auth.service';
 import { AuthenticatedRequest } from '../../utils/AuthRequestType';
 
@@ -8,6 +8,8 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
     throw new Error('JWT_SECRET environment variable is not set!');
 }
+
+const prisma = new PrismaClient();
 
 export const authController = {
     // --- SIGNUP CONTROLLER ---
@@ -142,6 +144,42 @@ export const authController = {
             res.status(200).json(result);
         } catch (error: any) {
             res.status(400).json({ message: error.message });
+        }
+    },
+
+    /**
+     * Check if a user's account is ready after Hotmart payment.
+     * Called by the /welcome polling page to detect when the webhook has processed.
+     * GET /auth/account-ready?email=buyer@email.com
+     */
+    async accountReady(req: Request, res: Response) {
+        try {
+            const email = (req.query.email as string || '').trim().toLowerCase();
+
+            if (!email) {
+                return res.status(400).json({ ready: false, message: 'Email is required' });
+            }
+
+            const user = await prisma.user.findUnique({
+                where: { email },
+                select: { accountSetupToken: true }
+            });
+
+            if (!user) {
+                // Webhook hasn't fired yet — user doesn't exist
+                return res.status(200).json({ ready: false });
+            }
+
+            if (!user.accountSetupToken) {
+                // User exists but already set their password
+                return res.status(200).json({ ready: false, alreadySetup: true });
+            }
+
+            // User exists and has a setup token — account is ready
+            return res.status(200).json({ ready: true, token: user.accountSetupToken });
+        } catch (error: any) {
+            console.error('Error in accountReady:', error);
+            res.status(500).json({ ready: false, message: 'Internal server error' });
         }
     }
 };

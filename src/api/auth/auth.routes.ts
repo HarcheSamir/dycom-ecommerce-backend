@@ -10,4 +10,5 @@ router.post('/verify-otp', authController.verifyAdminOtp); // <--- Ensure this i
 router.post('/forgot-password', authController.forgotPassword);
 router.post('/reset-password', authController.resetPassword);
 router.post('/set-password', authController.setPassword);
+router.get('/account-ready', authController.accountReady);
 export default router;
