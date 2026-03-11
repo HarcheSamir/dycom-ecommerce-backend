@@ -87,7 +87,7 @@ export const sendWelcomeWithPasswordSetup = async (
     const response = await resend.emails.send({
       from: 'Dycom Club <noreply@dycom-club.com>',
       to: [email],
-      subject: '🎉 Bienvenue chez Dycom Club - Finalisez votre compte',
+      subject: 'Bienvenue chez Dycom Club - Finalisez votre compte',
       html: `
         <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background-color: #f8f9fa;">
           <div style="background-color: #1a1a2e; border-radius: 16px; padding: 40px; text-align: center;">
