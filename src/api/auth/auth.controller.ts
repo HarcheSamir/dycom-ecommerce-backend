@@ -150,18 +150,18 @@ export const authController = {
     /**
      * Check if a user's account is ready after Hotmart payment.
      * Called by the /welcome polling page to detect when the webhook has processed.
-     * GET /auth/account-ready?email=buyer@email.com
+     * GET /auth/account-ready?transaction=HP12345...
      */
     async accountReady(req: Request, res: Response) {
         try {
-            const email = (req.query.email as string || '').trim().toLowerCase();
+            const transaction = (req.query.transaction as string || '').trim();
 
-            if (!email) {
-                return res.status(400).json({ ready: false, message: 'Email is required' });
+            if (!transaction) {
+                return res.status(400).json({ ready: false, message: 'Transaction ID is required' });
             }
 
-            const user = await prisma.user.findUnique({
-                where: { email },
+            const user = await prisma.user.findFirst({
+                where: { hotmartTransactionCode: transaction },
                 select: { accountSetupToken: true }
             });
 
