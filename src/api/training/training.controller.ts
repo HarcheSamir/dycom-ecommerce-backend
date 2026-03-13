@@ -146,6 +146,8 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
                   duration: true,
                   order: true,
                   createdAt: true, // Needed for new check
+                  buttonText: true,
+                  buttonUrl: true,
                   progress: {
                     where: { userId },
                     select: {

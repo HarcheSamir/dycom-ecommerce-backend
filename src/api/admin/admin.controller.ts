@@ -309,7 +309,7 @@ export const createSection = async (req: Request, res: Response) => {
 
 export const addVideoToSection = async (req: Request, res: Response) => {
     const { sectionId } = req.params;
-    const { title, vimeoId, duration, description, order }: { title: string; vimeoId: string; duration?: number; description?: string; order?: number } = req.body;
+    const { title, vimeoId, duration, description, order, buttonText, buttonUrl }: { title: string; vimeoId: string; duration?: number; description?: string; order?: number; buttonText?: string; buttonUrl?: string; } = req.body;
 
     if (!title || !vimeoId) {
         return res.status(400).json({ error: 'Title and vimeoId are required.' });
@@ -334,7 +334,9 @@ export const addVideoToSection = async (req: Request, res: Response) => {
                 duration: duration || 0,
                 description,
                 order: newOrder,
-                sectionId: sectionId as string
+                sectionId: sectionId as string,
+                buttonText,
+                buttonUrl
             },
         });
         res.status(201).json(video);
@@ -381,11 +383,11 @@ export const deleteSection = async (req: Request, res: Response) => {
 
 export const updateVideo = async (req: Request, res: Response) => {
     const { videoId } = req.params;
-    const { title, vimeoId, description, duration, order }: { title: string; vimeoId: string; description?: string; duration?: number; order?: number } = req.body;
+    const { title, vimeoId, description, duration, order, buttonText, buttonUrl }: { title: string; vimeoId: string; description?: string; duration?: number; order?: number; buttonText?: string; buttonUrl?: string; } = req.body;
     try {
         const updatedVideo = await prisma.video.update({
             where: { id: videoId as string },
-            data: { title, vimeoId, description, duration, order },
+            data: { title, vimeoId, description, duration, order, buttonText, buttonUrl },
         });
         res.status(200).json(updatedVideo);
     } catch (error) {
