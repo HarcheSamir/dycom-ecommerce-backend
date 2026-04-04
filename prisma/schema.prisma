@@ -247,6 +247,7 @@ model Video {
   sectionId   String
   buttonText  String?
   buttonUrl   String?         @db.Text
+  scheduledAt DateTime?
   progress    VideoProgress[]
   section     Section         @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   createdAt   DateTime        @default(now())

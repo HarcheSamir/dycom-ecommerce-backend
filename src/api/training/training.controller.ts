@@ -148,6 +148,7 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
                   createdAt: true, // Needed for new check
                   buttonText: true,
                   buttonUrl: true,
+                  scheduledAt: true,
                   progress: {
                     where: { userId },
                     select: {
@@ -249,7 +250,18 @@ export const getCourseById = async (req: AuthenticatedRequest, res: Response) =>
           const hasStartedVideo = video.progress.length > 0;
           // A video is new if created after user joined AND user hasn't watched/started it
           const isNewVideo = (new Date(video.createdAt) > userJoinDate) && !hasStartedVideo;
-          return { ...video, isNew: isNewVideo };
+
+          // Scheduled release: lock videos with a future scheduledAt
+          const isLocked = video.scheduledAt && new Date(video.scheduledAt) > new Date();
+
+          return {
+            ...video,
+            isNew: isNewVideo,
+            isLocked: !!isLocked,
+            scheduledAt: video.scheduledAt,
+            // Strip vimeoId for locked videos so frontend cannot embed the player
+            vimeoId: isLocked ? '' : video.vimeoId,
+          };
         });
 
         return {
@@ -274,6 +286,12 @@ export const updateVideoProgress = async (req: AuthenticatedRequest, res: Respon
     const { videoId } = req.params;
     const userId = req.user!.userId;
     const { lastPosition, percentage } = req.body;
+
+    // Block progress updates on locked (scheduled) videos
+    const video = await prisma.video.findUnique({ where: { id: videoId as string }, select: { scheduledAt: true } });
+    if (video?.scheduledAt && new Date(video.scheduledAt) > new Date()) {
+      return res.status(403).json({ error: 'This video is not yet available.' });
+    }
 
     const isCompleted = Number(percentage) >= 95;
 
